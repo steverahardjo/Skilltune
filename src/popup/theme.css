@@ -341,6 +341,22 @@ body {
   height: 20px;
 }
 
+.redo-btn {
+  color: var(--md-on-surface-variant);
+}
+
+.profile-loading {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 12px 0;
+  margin-bottom: 16px;
+  font-size: 13px;
+  color: var(--md-on-surface-variant);
+  font-family: var(--md-font-family);
+}
+
 /* ---------- Reset link ---------- */
 
 .reset-link {
@@ -380,6 +396,49 @@ body {
   line-height: 1.6;
   white-space: pre-wrap;
   word-break: break-word;
+}
+
+/* ---------- Write resume button ---------- */
+
+.write-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  width: 100%;
+  padding: 12px 0;
+  font-size: 14px;
+  font-weight: 500;
+  font-family: var(--md-font-family);
+  color: var(--md-primary);
+  background: var(--md-surface);
+  border: 1.5px solid var(--md-outline);
+  border-radius: 12px;
+  cursor: pointer;
+  letter-spacing: 0.1px;
+  margin-bottom: 16px;
+  transition: background 180ms ease, border-color 180ms ease, transform 100ms ease;
+}
+
+.write-btn:hover:not(:disabled):not(.disabled) {
+  background: var(--md-primary-container);
+  border-color: var(--md-primary);
+}
+
+.write-btn:active:not(:disabled):not(.disabled) {
+  transform: scale(0.99);
+}
+
+.write-btn:disabled,
+.write-btn.disabled {
+  opacity: 0.38;
+  cursor: default;
+  transform: none;
+}
+
+.write-icon {
+  width: 20px;
+  height: 20px;
 }
 
 /* ---------- Info card ---------- */
