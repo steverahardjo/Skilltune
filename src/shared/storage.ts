@@ -17,5 +17,5 @@ export async function clearConfig(): Promise<void> {
 
 export async function hasConfig(): Promise<boolean> {
   const config = await loadConfig()
-  return config !== null && config.name.length > 0
+  return config !== null && config.name.length > 0 && config.workspaceFolder.length > 0
 }

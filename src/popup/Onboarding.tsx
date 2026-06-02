@@ -1,7 +1,7 @@
 import "./theme.css"
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import type { UserConfig } from "../shared/types"
-import { saveConfig } from "../shared/storage"
+import { loadConfig, saveConfig } from "../shared/storage"
 import { pickWorkspaceFolder } from "../shared/filesystem"
 
 interface Props {
@@ -11,6 +11,7 @@ interface Props {
 export function Onboarding({ onComplete }: Props) {
   const [step, setStep] = useState(1)
   const [picking, setPicking] = useState(false)
+  const [loaded, setLoaded] = useState(false)
   const [config, setConfig] = useState<UserConfig>({
     name: "",
     targetRoles: "",
@@ -18,8 +19,24 @@ export function Onboarding({ onComplete }: Props) {
     workspaceFolder: "",
   })
 
+  useEffect(() => {
+    loadConfig().then((saved) => {
+      if (saved) {
+        setConfig(saved)
+        setStep(saved.workspaceFolder ? 2 : saved.name ? 2 : 1)
+      }
+      setLoaded(true)
+    })
+  }, [])
+
   const update = (field: keyof UserConfig, value: string) =>
     setConfig((prev) => ({ ...prev, [field]: value }))
+
+  const persist = async (overrides?: Partial<UserConfig>) => {
+    const next = { ...config, ...overrides }
+    setConfig(next)
+    await saveConfig(next)
+  }
 
   const canNext = step === 1
     ? config.name.trim().length > 0
@@ -30,13 +47,28 @@ export function Onboarding({ onComplete }: Props) {
     const folder = await pickWorkspaceFolder()
     setPicking(false)
     if (folder) {
-      setConfig((prev) => ({ ...prev, workspaceFolder: folder }))
+      await persist({ workspaceFolder: folder })
     }
   }
 
+  const handleNext = async () => {
+    await persist()
+    setStep(2)
+  }
+
+  const handleBack = () => setStep(1)
+
   const handleFinish = async () => {
-    await saveConfig(config)
+    await persist()
     onComplete()
+  }
+
+  if (!loaded) {
+    return (
+      <div className="google-popup" style={{ display: "flex", alignItems: "center", justifyContent: "center", minHeight: 200 }}>
+        <div className="spinner" />
+      </div>
+    )
   }
 
   return (
@@ -132,12 +164,12 @@ export function Onboarding({ onComplete }: Props) {
 
       <div className="form-actions">
         {step > 1 && (
-          <button className="btn-text" onClick={() => setStep(1)}>
+          <button className="btn-text" onClick={handleBack}>
             Back
           </button>
         )}
         {step < 2 ? (
-          <button className="btn-primary" disabled={!canNext} onClick={() => setStep(2)}>
+          <button className="btn-primary" disabled={!canNext} onClick={handleNext}>
             Next
           </button>
         ) : (
