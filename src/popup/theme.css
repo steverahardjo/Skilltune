@@ -169,6 +169,12 @@ body {
   line-height: 1.5;
 }
 
+.hint-text .api-link {
+  color: #174ea6;
+  font-weight: 500;
+  text-decoration: underline;
+}
+
 /* ---------- Actions ---------- */
 
 .form-actions {
@@ -291,6 +297,89 @@ body {
 .scan-icon {
   width: 20px;
   height: 20px;
+}
+
+/* ---------- Profile button ---------- */
+
+.profile-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  width: 100%;
+  padding: 12px 0;
+  font-size: 14px;
+  font-weight: 500;
+  font-family: var(--md-font-family);
+  color: var(--md-primary);
+  background: var(--md-surface);
+  border: 1.5px solid var(--md-outline);
+  border-radius: 12px;
+  cursor: pointer;
+  letter-spacing: 0.1px;
+  margin-bottom: 16px;
+  transition: background 180ms ease, border-color 180ms ease, transform 100ms ease;
+}
+
+.profile-btn:hover:not(:disabled) {
+  background: var(--md-primary-container);
+  border-color: var(--md-primary);
+}
+
+.profile-btn:active:not(:disabled) {
+  transform: scale(0.99);
+}
+
+.profile-btn:disabled {
+  opacity: 0.38;
+  cursor: default;
+  transform: none;
+}
+
+.profile-icon {
+  width: 20px;
+  height: 20px;
+}
+
+/* ---------- Reset link ---------- */
+
+.reset-link {
+  display: block;
+  width: 100%;
+  margin-top: 12px;
+  padding: 6px 0;
+  font-size: 11px;
+  font-family: var(--md-font-family);
+  color: var(--md-on-surface-muted);
+  background: none;
+  border: none;
+  cursor: pointer;
+  text-align: center;
+  transition: color 180ms ease;
+}
+
+.reset-link:hover {
+  color: var(--md-error);
+}
+
+.profile-result {
+  margin-bottom: 12px;
+  padding: 12px 14px;
+  background: var(--md-background);
+  border-radius: 10px;
+  border: 1px solid var(--md-outline);
+  max-height: 200px;
+  overflow-y: auto;
+}
+
+.profile-text {
+  margin: 0;
+  font-size: 11px;
+  font-family: var(--md-font-family);
+  color: var(--md-on-surface);
+  line-height: 1.6;
+  white-space: pre-wrap;
+  word-break: break-word;
 }
 
 /* ---------- Info card ---------- */

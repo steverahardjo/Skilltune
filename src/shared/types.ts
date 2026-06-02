@@ -3,6 +3,7 @@ export interface UserConfig {
   targetRoles: string
   industry: string
   workspaceFolder: string
+  apiKey: string
 }
 
 export interface JobScanResult {

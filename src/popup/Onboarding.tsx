@@ -8,6 +8,8 @@ interface Props {
   onComplete: () => void
 }
 
+const TOTAL_STEPS = 3
+
 export function Onboarding({ onComplete }: Props) {
   const [step, setStep] = useState(1)
   const [picking, setPicking] = useState(false)
@@ -17,13 +19,17 @@ export function Onboarding({ onComplete }: Props) {
     targetRoles: "",
     industry: "",
     workspaceFolder: "",
+    apiKey: "",
   })
 
   useEffect(() => {
     loadConfig().then((saved) => {
       if (saved) {
         setConfig(saved)
-        setStep(saved.workspaceFolder ? 2 : saved.name ? 2 : 1)
+        if (saved.apiKey) setStep(3)
+        else if (saved.workspaceFolder) setStep(3)
+        else if (saved.name) setStep(2)
+        else setStep(1)
       }
       setLoaded(true)
     })
@@ -38,9 +44,12 @@ export function Onboarding({ onComplete }: Props) {
     await saveConfig(next)
   }
 
-  const canNext = step === 1
-    ? config.name.trim().length > 0
-    : config.workspaceFolder.trim().length > 0
+  const canNext = (s: number): boolean => {
+    if (s === 1) return config.name.trim().length > 0
+    if (s === 2) return config.workspaceFolder.trim().length > 0
+    if (s === 3) return config.apiKey.trim().length > 0
+    return false
+  }
 
   const handlePickFolder = async () => {
     setPicking(true)
@@ -53,10 +62,10 @@ export function Onboarding({ onComplete }: Props) {
 
   const handleNext = async () => {
     await persist()
-    setStep(2)
+    setStep((s) => Math.min(s + 1, TOTAL_STEPS))
   }
 
-  const handleBack = () => setStep(1)
+  const handleBack = () => setStep((s) => Math.max(s - 1, 1))
 
   const handleFinish = async () => {
     await persist()
@@ -74,21 +83,24 @@ export function Onboarding({ onComplete }: Props) {
   return (
     <div className="google-popup">
       <div className="step-indicator">
-        <div className={`step-dot ${step >= 1 ? "active" : ""}`}>
-          <span className="step-num">1</span>
-          {step > 1 && (
-            <svg className="step-check" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.5">
-              <polyline points="5,13 10,18 19,6" />
-            </svg>
-          )}
-        </div>
-        <div className={`step-connector ${step >= 2 ? "active" : ""}`} />
-        <div className={`step-dot ${step >= 2 ? "active" : ""}`}>
-          <span className="step-num">2</span>
-        </div>
+        {[1, 2, 3].map((s, i) => (
+          <div key={s} style={{ display: "contents" }}>
+            {i > 0 && (
+              <div className={`step-connector ${step > s - 1 ? "active" : ""}`} />
+            )}
+            <div className={`step-dot ${step >= s ? "active" : ""}`}>
+              <span className="step-num">{s}</span>
+              {step > s && (
+                <svg className="step-check" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.5">
+                  <polyline points="5,13 10,18 19,6" />
+                </svg>
+              )}
+            </div>
+          </div>
+        ))}
       </div>
 
-      {step === 1 ? (
+      {step === 1 && (
         <>
           <h2 className="form-heading">About you</h2>
           <p className="form-sub">Help us understand your background</p>
@@ -124,7 +136,9 @@ export function Onboarding({ onComplete }: Props) {
             />
           </div>
         </>
-      ) : (
+      )}
+
+      {step === 2 && (
         <>
           <h2 className="form-heading">Workspace folder</h2>
           <p className="form-sub">Pick the folder with your resume and job postings</p>
@@ -162,18 +176,55 @@ export function Onboarding({ onComplete }: Props) {
         </>
       )}
 
+      {step === 3 && (
+        <>
+          <h2 className="form-heading">API key</h2>
+          <p className="form-sub">Connect your DeepSeek account to power the agent</p>
+
+          <div className="form-group">
+            <label className="form-label">DeepSeek API key</label>
+            <input
+              className="form-input"
+              type="password"
+              value={config.apiKey}
+              onChange={(e) => update("apiKey", e.target.value)}
+              placeholder="sk-..."
+              autoFocus
+            />
+          </div>
+
+          <div className="hint-card api-hint">
+            <svg className="hint-icon" viewBox="0 0 24 24" fill="currentColor">
+              <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-6h2v6zm0-8h-2V7h2v2z" />
+            </svg>
+            <p className="hint-text">
+              Get your key at{" "}
+              <a
+                className="api-link"
+                href="https://platform.deepseek.com/api_keys"
+                target="_blank"
+                rel="noopener noreferrer"
+              >
+                platform.deepseek.com
+              </a>
+              . Your key is stored locally and sent only to DeepSeek's API.
+            </p>
+          </div>
+        </>
+      )}
+
       <div className="form-actions">
         {step > 1 && (
           <button className="btn-text" onClick={handleBack}>
             Back
           </button>
         )}
-        {step < 2 ? (
-          <button className="btn-primary" disabled={!canNext} onClick={handleNext}>
+        {step < TOTAL_STEPS ? (
+          <button className="btn-primary" disabled={!canNext(step)} onClick={handleNext}>
             Next
           </button>
         ) : (
-          <button className="btn-primary" disabled={!canNext} onClick={handleFinish}>
+          <button className="btn-primary" disabled={!canNext(step)} onClick={handleFinish}>
             Get started
           </button>
         )}

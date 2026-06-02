@@ -79,3 +79,16 @@ export async function getStoredHandle(): Promise<FileSystemDirectoryHandle | nul
 export async function getWorkspaceHandle(): Promise<FileSystemDirectoryHandle | null> {
   return getStoredHandle()
 }
+
+export async function clearWorkspaceHandle(): Promise<void> {
+  const db = await openDB()
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(HANDLE_STORE, "readwrite")
+    tx.objectStore(HANDLE_STORE).delete("workspace")
+    tx.oncomplete = () => {
+      db.close()
+      resolve()
+    }
+    tx.onerror = () => reject(tx.error)
+  })
+}

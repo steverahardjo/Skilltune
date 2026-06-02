@@ -1,9 +1,10 @@
-import { serve } from "bun";
-import index from "./index.html";
+import { serve } from "bun"
+import { mastra } from "./services/mastra"
+import index from "./index.html"
 
 const server = serve({
+  port: 3721,
   routes: {
-    // Serve index.html for all unmatched routes.
     "/*": index,
 
     "/api/hello": {
@@ -11,31 +12,62 @@ const server = serve({
         return Response.json({
           message: "Hello, world!",
           method: "GET",
-        });
+        })
       },
       async PUT(req) {
         return Response.json({
           message: "Hello, world!",
           method: "PUT",
-        });
+        })
       },
     },
 
-    "/api/hello/:name": async req => {
-      const name = req.params.name;
+    "/api/hello/:name": async (req) => {
+      const name = req.params.name
       return Response.json({
         message: `Hello, ${name}!`,
-      });
+      })
+    },
+
+    "/api/profile": {
+      async POST(req) {
+        try {
+          const body = await req.json()
+          const { path, apiKey } = body as { path?: string; apiKey?: string }
+
+          if (!path) {
+            return Response.json({ error: "Missing 'path' field" }, { status: 400 })
+          }
+          if (!apiKey) {
+            return Response.json({ error: "Missing 'apiKey' field" }, { status: 400 })
+          }
+
+          process.env.OPENAI_API_KEY = apiKey
+          process.env.OPENAI_BASE_URL = "https://api.deepseek.com"
+
+          const agent = mastra.getAgentById("profiling-agent")
+          const result = await agent.generate(
+            `Read and profile all files in this directory: ${path}`
+          )
+
+          delete process.env.OPENAI_API_KEY
+          delete process.env.OPENAI_BASE_URL
+
+          return Response.json({
+            profile: result.text,
+          })
+        } catch (err) {
+          const message = err instanceof Error ? err.message : "Unknown error"
+          return Response.json({ error: message }, { status: 500 })
+        }
+      },
     },
   },
 
   development: process.env.NODE_ENV !== "production" && {
-    // Enable browser hot reloading in development
     hmr: true,
-
-    // Echo console logs from the browser to the server
     console: true,
   },
-});
+})
 
-console.log(`🚀 Server running at ${server.url}`);
+console.log(`Server running at ${server.url}`)

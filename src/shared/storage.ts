@@ -2,9 +2,19 @@ import type { UserConfig } from "./types"
 
 const CONFIG_KEY = "userConfig"
 
+const DEFAULTS: UserConfig = {
+  name: "",
+  targetRoles: "",
+  industry: "",
+  workspaceFolder: "",
+  apiKey: "",
+}
+
 export async function loadConfig(): Promise<UserConfig | null> {
   const result = await chrome.storage.local.get(CONFIG_KEY)
-  return result[CONFIG_KEY] ?? null
+  const raw = result[CONFIG_KEY]
+  if (!raw) return null
+  return { ...DEFAULTS, ...raw }
 }
 
 export async function saveConfig(config: UserConfig): Promise<void> {
@@ -17,5 +27,10 @@ export async function clearConfig(): Promise<void> {
 
 export async function hasConfig(): Promise<boolean> {
   const config = await loadConfig()
-  return config !== null && config.name.length > 0 && config.workspaceFolder.length > 0
+  return (
+    config !== null &&
+    (config.name?.length ?? 0) > 0 &&
+    (config.workspaceFolder?.length ?? 0) > 0 &&
+    (config.apiKey?.length ?? 0) > 0
+  )
 }

@@ -2,7 +2,7 @@ import "./theme.css"
 import { useState, useEffect } from "react"
 import type { UserConfig } from "../shared/types"
 import { loadConfig } from "../shared/storage"
-import { scanCurrentPage } from "../shared/scan"
+import { scanCurrentPage, requestProfile, resetSession } from "../shared/scan"
 
 interface Props {
   onRescanSetup: () => void
@@ -11,8 +11,10 @@ interface Props {
 export function Dashboard({ onRescanSetup }: Props) {
   const [config, setConfig] = useState<UserConfig | null>(null)
   const [scanning, setScanning] = useState(false)
+  const [profiling, setProfiling] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [saved, setSaved] = useState(false)
+  const [profile, setProfile] = useState<string | null>(null)
 
   useEffect(() => {
     loadConfig().then(setConfig)
@@ -30,6 +32,30 @@ export function Dashboard({ onRescanSetup }: Props) {
     } finally {
       setScanning(false)
     }
+  }
+
+  const handleProfile = async () => {
+    if (!config?.workspaceFolder || !config?.apiKey) return
+    setProfiling(true)
+    setError(null)
+    setProfile(null)
+    try {
+      const result = await requestProfile(config.workspaceFolder, config.apiKey)
+      setProfile(result)
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Profile failed")
+    } finally {
+      setProfiling(false)
+    }
+  }
+
+  const handleReset = async () => {
+    setError(null)
+    setProfile(null)
+    setSaved(false)
+    setConfig(null)
+    await resetSession()
+    onRescanSetup()
   }
 
   if (!config) return null
@@ -60,6 +86,23 @@ export function Dashboard({ onRescanSetup }: Props) {
         )}
       </button>
 
+      <button className="profile-btn" onClick={handleProfile} disabled={profiling}>
+        {profiling ? (
+          <>
+            <div className="spinner" style={{ width: 18, height: 18, borderWidth: 2 }} />
+            Profiling...
+          </>
+        ) : (
+          <>
+            <svg className="profile-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
+              <circle cx="12" cy="7" r="4" />
+            </svg>
+            Profile me
+          </>
+        )}
+      </button>
+
       {error && (
         <div className="scan-error">
           <svg className="scan-error-icon" viewBox="0 0 24 24" fill="currentColor">
@@ -75,6 +118,12 @@ export function Dashboard({ onRescanSetup }: Props) {
             <path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z" />
           </svg>
           <span className="scan-confirm-text">Screenshot saved</span>
+        </div>
+      )}
+
+      {profile && (
+        <div className="profile-result">
+          <pre className="profile-text">{profile}</pre>
         </div>
       )}
 
@@ -98,6 +147,10 @@ export function Dashboard({ onRescanSetup }: Props) {
       <p className="dash-hint">
         Navigate to a job posting, then click Scan.
       </p>
+
+      <button className="reset-link" onClick={handleReset}>
+        Reset setup
+      </button>
     </div>
   )
 }
