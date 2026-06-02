@@ -46,7 +46,16 @@ function extractJobContent(): ScanResponse {
   text = text
     .replace(/\n{3,}/g, "\n\n")
     .replace(/ {2,}/g, " ")
-    .slice(0, 12000)
+
+  const CROP = 20000
+  const words = text.split(/\s+/).filter(Boolean).length
+  const cropped = text.length > CROP
+  text = text.slice(0, CROP)
+  if (cropped) {
+    console.log(`[content] Cropped from ${text.length + (CROP - text.length) || "?"} to ${CROP} chars (~${words} words)`)
+  } else {
+    console.log(`[content] Extracted ${text.length} chars, ~${words} words`)
+  }
 
   return { title, url: location.href, text, company }
 }

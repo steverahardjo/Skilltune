@@ -3,8 +3,16 @@ import { mastra } from "./services/mastra"
 import index from "./index.html"
 import { readFile, writeFile, mkdir } from "node:fs/promises"
 import { join } from "node:path"
+import {
+  getSkillContent,
+  saveSkill,
+  buildSkillPrompt,
+} from "./services/skills"
 
 const KEY_FILE = join(process.cwd(), ".mastra", "api_key")
+const OUT_DIR = join(process.cwd(), ".mastra", "output")
+const TYP_OUTPUT = join(OUT_DIR, "tailored_resume.typ")
+const PDF_OUTPUT = join(OUT_DIR, "tailored_resume.pdf")
 
 async function loadApiKey(): Promise<string | null> {
   try {
@@ -42,6 +50,23 @@ function logPrompt(label: string, prompt: string) {
   console.log("───────────────────────\n")
 }
 
+async function readOutputTyp(): Promise<string | null> {
+  try {
+    return await Bun.file(TYP_OUTPUT).text()
+  } catch {
+    return null
+  }
+}
+
+async function pdfExists(): Promise<boolean> {
+  try {
+    await Bun.file(PDF_OUTPUT).arrayBuffer()
+    return true
+  } catch {
+    return false
+  }
+}
+
 const server = serve({
   port: 3721,
   routes: {
@@ -56,6 +81,79 @@ const server = serve({
           return Response.json({ saved: true })
         } catch (err) {
           return Response.json({ error: String(err) }, { status: 500 })
+        }
+      },
+    },
+
+    "/api/create-skill": {
+      async POST(req) {
+        try {
+          const body = await req.json()
+          const {
+            resumePath,
+            name,
+            targetRoles,
+            industry,
+          } = body as {
+            resumePath?: string
+            name?: string
+            targetRoles?: string
+            industry?: string
+          }
+          let { apiKey } = body as { apiKey?: string }
+
+          if (!resumePath || !name) {
+            return Response.json(
+              { error: "Missing resumePath or name" },
+              { status: 400 }
+            )
+          }
+          if (!apiKey) apiKey = (await loadApiKey()) ?? undefined
+          if (!apiKey) {
+            return Response.json(
+              { error: "No API key. Run onboarding first." },
+              { status: 400 }
+            )
+          }
+
+          setDeepSeekEnv(apiKey)
+
+          let resumeContent: string
+          try {
+            const f = Bun.file(resumePath)
+            resumeContent = (await f.text()).trim()
+            console.log(
+              `[api/create-skill] Read resume: ${resumePath.split("/").pop()} (${resumeContent.length} chars)`
+            )
+          } catch {
+            return Response.json(
+              { error: `Cannot read resume file: ${resumePath}` },
+              { status: 400 }
+            )
+          }
+
+          const prompt = buildSkillPrompt(resumeContent, {
+            name,
+            targetRoles: targetRoles ?? "",
+            industry: industry ?? "",
+          })
+          logPrompt("create-skill", prompt)
+
+          const agent = mastra.getAgentById("posting-analysis")
+          const result = await agent.generate(prompt)
+
+          clearDeepSeekEnv()
+
+          const skillContent = result.text
+          await saveSkill(skillContent)
+          console.log(
+            `[api/create-skill] Skill saved (${skillContent.length} chars)`
+          )
+
+          return Response.json({ skillCreated: true })
+        } catch (err) {
+          const message = err instanceof Error ? err.message : "Unknown error"
+          return Response.json({ error: message }, { status: 500 })
         }
       },
     },
@@ -80,6 +178,9 @@ const server = serve({
 
           setDeepSeekEnv(apiKey)
 
+          const words = text.split(/\s+/).filter(Boolean).length
+          console.log(`[api/analyze] Text: ${text.length} chars, ~${words} words`)
+
           const prompt = `Analyze this job posting:\n\n${text.replace(/\n{2,}/g, "\n")}`
           logPrompt("analyze-posting", prompt)
 
@@ -103,12 +204,9 @@ const server = serve({
       async POST(req) {
         try {
           const body = await req.json()
-          const { resumePath, analysis } = body as { resumePath?: string; analysis?: string }
+          const { analysis } = body as { analysis?: string }
           let { apiKey } = body as { apiKey?: string }
 
-          if (!resumePath) {
-            return Response.json({ error: "Missing 'resumePath'" }, { status: 400 })
-          }
           if (!analysis) {
             return Response.json({ error: "Missing 'analysis'" }, { status: 400 })
           }
@@ -122,32 +220,38 @@ const server = serve({
 
           setDeepSeekEnv(apiKey)
 
-          let resumeContent: string
-          const name = resumePath.split("/").pop() || resumePath
-          try {
-            const f = Bun.file(resumePath)
-            const text = await f.text()
-            resumeContent = text.slice(0, 3000).trim()
-            console.log(`[api/write] Read resume: ${name} (${resumeContent.length} chars)`)
-          } catch {
+          const skillContent = await getSkillContent()
+          if (!skillContent) {
             return Response.json(
-              { error: `Cannot read resume file: ${resumePath}` },
+              {
+                error:
+                  "No resume skill found. Re-run onboarding to create your resume profile.",
+              },
               { status: 400 }
             )
           }
-          console.log(`[api/write] Analysis: ${analysis.length} chars`)
 
-          const prompt = `Write a tailored Typst resume.
+          console.log(
+            `[api/write] Skill: ${skillContent.length} chars, Analysis: ${analysis.length} chars`
+          )
 
-CURRENT RESUME:
---- ${name} ---
-${resumeContent}
---- End of resume ---
+          const prompt = `Write a tailored Typst resume using the RESUME SKILL and JOB ANALYSIS below. Use your tools to write the .typ file and compile it.
+
+RESUME SKILL (the person's professional profile — source of truth):
+--- skill ---
+${skillContent}
+--- end skill ---
 
 JOB POSTING ANALYSIS:
 ${analysis}
 
-Generate the tailored Typst source code.`
+Follow the workflow:
+1. Study the RESUME SKILL and JOB ANALYSIS
+2. Write a tailored Typst resume matching the job
+3. Use the writer tool to save it as "tailored_resume.typ"
+4. Use the typst_compile tool to compile it to PDF
+5. Confirm the file paths`
+
           logPrompt("write-resume", prompt)
 
           const agent = mastra.getAgentById("resume-writer")
@@ -155,9 +259,15 @@ Generate the tailored Typst source code.`
 
           clearDeepSeekEnv()
 
+          const typContent = await readOutputTyp()
+          const compiled = await pdfExists()
+
           return Response.json({
-            typ: result.text,
+            typ: typContent ?? result.text,
+            typPath: TYP_OUTPUT,
+            pdfPath: compiled ? PDF_OUTPUT : null,
             steps: result.steps?.length ?? 0,
+            message: result.text,
           })
         } catch (err) {
           const message = err instanceof Error ? err.message : "Unknown error"
@@ -165,12 +275,47 @@ Generate the tailored Typst source code.`
         }
       },
     },
+
+    "/api/download/typ": {
+      async GET(req) {
+        try {
+          const file = Bun.file(TYP_OUTPUT)
+          return new Response(file, {
+            headers: {
+              "Content-Type": "text/plain",
+              "Content-Disposition":
+                'attachment; filename="tailored_resume.typ"',
+            },
+          })
+        } catch {
+          return new Response("Not found", { status: 404 })
+        }
+      },
+    },
+
+    "/api/download/pdf": {
+      async GET(req) {
+        try {
+          const file = Bun.file(PDF_OUTPUT)
+          return new Response(file, {
+            headers: {
+              "Content-Type": "application/pdf",
+              "Content-Disposition":
+                'attachment; filename="tailored_resume.pdf"',
+            },
+          })
+        } catch {
+          return new Response("Not found", { status: 404 })
+        }
+      },
+    },
   },
 
-  development: process.env.NODE_ENV !== "production" && {
-    hmr: true,
-    console: true,
-  },
+  development:
+    process.env.NODE_ENV !== "production" && {
+      hmr: true,
+      console: true,
+    },
 })
 
 const savedKey = await loadApiKey()

@@ -2,6 +2,7 @@ import "./theme.css"
 import { useState, useEffect } from "react"
 import type { UserConfig } from "../shared/types"
 import { loadConfig, saveConfig } from "../shared/storage"
+import { requestCreateSkill } from "../shared/scan"
 
 interface Props {
   resumeSession: boolean
@@ -13,6 +14,7 @@ const TOTAL_STEPS = 3
 export function Onboarding({ resumeSession, onComplete }: Props) {
   const [step, setStep] = useState(1)
   const [loaded, setLoaded] = useState(false)
+  const [creatingSkill, setCreatingSkill] = useState(false)
   const [config, setConfig] = useState<UserConfig>({
     name: "",
     targetRoles: "",
@@ -75,12 +77,39 @@ export function Onboarding({ resumeSession, onComplete }: Props) {
     } catch {
       // server might not be running yet — key sent per-request as fallback
     }
+
+    setCreatingSkill(true)
+    try {
+      await requestCreateSkill(
+        config.resumeFile,
+        config.name,
+        config.targetRoles,
+        config.industry,
+        config.apiKey
+      )
+    } catch (e) {
+      console.warn(
+        "[onboarding] Skill creation failed (non-fatal):",
+        e instanceof Error ? e.message : String(e)
+      )
+    } finally {
+      setCreatingSkill(false)
+    }
+
     onComplete()
   }
 
   if (!loaded) {
     return (
-      <div className="google-popup" style={{ display: "flex", alignItems: "center", justifyContent: "center", minHeight: 200 }}>
+      <div
+        className="google-popup"
+        style={{
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          minHeight: 200,
+        }}
+      >
         <div className="spinner" />
       </div>
     )
@@ -92,12 +121,20 @@ export function Onboarding({ resumeSession, onComplete }: Props) {
         {[1, 2, 3].map((s, i) => (
           <div key={s} style={{ display: "contents" }}>
             {i > 0 && (
-              <div className={`step-connector ${step > s - 1 ? "active" : ""}`} />
+              <div
+                className={`step-connector ${step > s - 1 ? "active" : ""}`}
+              />
             )}
             <div className={`step-dot ${step >= s ? "active" : ""}`}>
               <span className="step-num">{s}</span>
               {step > s && (
-                <svg className="step-check" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.5">
+                <svg
+                  className="step-check"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="white"
+                  strokeWidth="2.5"
+                >
                   <polyline points="5,13 10,18 19,6" />
                 </svg>
               )}
@@ -165,8 +202,8 @@ export function Onboarding({ resumeSession, onComplete }: Props) {
               <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-6h2v6zm0-8h-2V7h2v2z" />
             </svg>
             <p className="hint-text">
-              Enter the full path to your <strong>.typ</strong> or <strong>.tex</strong> resume file.
-              Best results with .typ files.
+              Enter the full path to your <strong>.typ</strong> or{" "}
+              <strong>.tex</strong> resume file. Best results with .typ files.
             </p>
           </div>
         </>
@@ -175,7 +212,9 @@ export function Onboarding({ resumeSession, onComplete }: Props) {
       {step === 3 && (
         <>
           <h2 className="form-heading">API key</h2>
-          <p className="form-sub">Connect your DeepSeek account to power the agent</p>
+          <p className="form-sub">
+            Connect your DeepSeek account to power the agent
+          </p>
 
           <div className="form-group">
             <label className="form-label">DeepSeek API key</label>
@@ -216,12 +255,30 @@ export function Onboarding({ resumeSession, onComplete }: Props) {
           </button>
         )}
         {step < TOTAL_STEPS ? (
-          <button className="btn-primary" disabled={!canNext(step)} onClick={handleNext}>
+          <button
+            className="btn-primary"
+            disabled={!canNext(step)}
+            onClick={handleNext}
+          >
             Next
           </button>
         ) : (
-          <button className="btn-primary" disabled={!canNext(step)} onClick={handleFinish}>
-            Get started
+          <button
+            className="btn-primary"
+            disabled={!canNext(step) || creatingSkill}
+            onClick={handleFinish}
+          >
+            {creatingSkill ? (
+              <>
+                <div
+                  className="spinner"
+                  style={{ width: 16, height: 16, borderWidth: 2 }}
+                />
+                &nbsp;Creating profile...
+              </>
+            ) : (
+              "Get started"
+            )}
           </button>
         )}
       </div>
