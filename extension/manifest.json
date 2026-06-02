@@ -3,7 +3,7 @@
   "name": "Resume Adjuster",
   "version": "0.1.0",
   "description": "Scan job postings and tailor your resume to match",
-  "permissions": ["activeTab", "storage", "scripting"],
+  "permissions": ["activeTab", "storage", "scripting", "downloads"],
   "host_permissions": ["<all_urls>"],
   "action": {
     "default_popup": "popup/index.html",
