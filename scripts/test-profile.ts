@@ -1,113 +1,61 @@
-import { join } from "node:path";
-import { readdir, readFile } from "node:fs/promises";
-import { mastra } from "../src/services/mastra";
-
-const READABLE_EXT = new Set([
-  ".txt",
-  ".md",
-  ".json",
-  ".csv",
-  ".yaml",
-  ".yml",
-  ".html",
-  ".typ",
-  ".tex",
-  ".typst",
-  ".log",
-]);
-const BATCH_SIZE = 3;
-const MAX_CHARS = 1500;
-
-async function readDir(
-  path: string,
-): Promise<{ name: string; content: string }[]> {
-  const files: { name: string; content: string }[] = [];
-
-  async function walk(dir: string) {
-    for (const entry of await readdir(dir, { withFileTypes: true })) {
-      const fp = join(dir, entry.name);
-      if (entry.isDirectory() && !entry.name.startsWith(".")) {
-        await walk(fp);
-      } else if (
-        entry.isFile() &&
-        !entry.name.startsWith(".") &&
-        READABLE_EXT.has(
-          entry.name.slice(entry.name.lastIndexOf(".")).toLowerCase(),
-        )
-      ) {
-        try {
-          const raw = await readFile(fp, "utf-8");
-          const content = raw.slice(0, MAX_CHARS).trim();
-          if (content) files.push({ name: entry.name, content });
-        } catch {
-          /* skip */
-        }
-      }
-    }
-  }
-
-  await walk(path);
-  return files.slice(0, 10);
-}
+import { readFile } from "node:fs/promises"
+import { mastra } from "../src/services/mastra"
 
 async function main() {
-  const dirPath = "/home/holyknight101/Documents/resume/";
-  const apiKey = process.argv[3] || process.env.DEEPSEEK_API_KEY;
+  const resumePath = process.argv[2]
+  const jobPostingPath = process.argv[3]
+  const apiKey = process.argv[4] || process.env.DEEPSEEK_API_KEY
 
-  if (!dirPath) {
+  if (!resumePath || !jobPostingPath) {
     console.error(
-      "Usage: bun scripts/test-profile.ts <directory-path> [deepseek-api-key]",
-    );
-    console.error("  e.g. bun scripts/test-profile.ts ~/career sk-xxx");
-    process.exit(1);
+      "Usage: bun scripts/test-profile.ts <resume-file> <job-posting-file> [deepseek-api-key]"
+    )
+    console.error("  e.g. bun scripts/test-profile.ts ~/resume.typ ~/posting.txt sk-xxx")
+    process.exit(1)
   }
   if (!apiKey) {
     console.error(
-      "Error: DEEPSEEK_API_KEY not set. Pass it as second arg or set env var.",
-    );
-    process.exit(1);
+      "Error: DEEPSEEK_API_KEY not set. Pass it as fourth arg or set env var."
+    )
+    process.exit(1)
   }
 
-  process.env.DEEPSEEK_API_KEY = apiKey;
+  process.env.DEEPSEEK_API_KEY = apiKey
 
-  console.log(`Reading files from: ${dirPath}`);
-  const files = await readDir(dirPath);
-  console.log(
-    `Found ${files.length} readable files: ${files.map((f) => f.name).join(", ")}`,
-  );
-  if (files.length === 0) {
-    console.log("No files found.");
-    process.exit(0);
-  }
+  const resumeContent = await readFile(resumePath, "utf-8")
+  const jobPosting = await readFile(jobPostingPath, "utf-8")
 
-  const agent = mastra.getAgentById("profiling-agent");
+  console.log(`Resume: ${resumeContent.length} chars`)
+  console.log(`Job posting: ${jobPosting.length} chars`)
 
-  for (let i = 0; i < files.length; i += BATCH_SIZE) {
-    const batch = files.slice(i, i + BATCH_SIZE);
-    const batchNum = Math.floor(i / BATCH_SIZE) + 1;
-    const total = Math.ceil(files.length / BATCH_SIZE);
+  console.log("\n=== Step 1: Analyze posting ===")
+  const analysisAgent = mastra.getAgentById("posting-analysis")
+  const analysisResult = await analysisAgent.generate(
+    `Analyze this job posting:\n\n${jobPosting}`
+  )
+  console.log(analysisResult.text)
 
-    const text = batch
-      .map((f) => `\n--- ${f.name} ---\n${f.content}`)
-      .join("\n");
-    const prompt =
-      batchNum === 1
-        ? `First batch (${batchNum}/${total}). Build a profile from these files. Store everything in working memory:\n${text}`
-        : `Batch ${batchNum}/${total}. Update working memory with any new info from these files:\n${text}`;
+  console.log("\n=== Step 2: Write tailored resume ===")
+  const writerAgent = mastra.getAgentById("resume-writer")
+  const writeResult = await writerAgent.generate(
+    `Write a tailored Typst resume.
 
-    const kb = (Buffer.byteLength(prompt, "utf-8") / 1024).toFixed(1);
-    console.log(`\n=== Batch ${batchNum}/${total} (${kb} KB) ===`);
+CURRENT RESUME:
+--- resume.typ ---
+${resumeContent.slice(0, 3000)}
+--- End of resume ---
 
-    const result = await agent.generate(prompt, {
-      memory: { thread: "profile-session", resource: "test-user" },
-    });
-    console.log(result.text);
-  }
+JOB POSTING ANALYSIS:
+${analysisResult.text}
 
-  console.log("\nDone.");
+Generate the tailored Typst source code.`
+  )
+  console.log(writeResult.text)
+
+  console.log("\nDone.")
 }
 
 main().catch((e) => {
-  console.error("Fatal:", e.message ?? e);
-  process.exit(1);
-});
+  console.error("Fatal:", e.message ?? e)
+  process.exit(1)
+})

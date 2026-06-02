@@ -13,11 +13,8 @@
   "dependencies": {
     "@ai-sdk/deepseek": "^2.0.35",
     "@mastra/core": "^1.37.1",
-    "@mastra/libsql": "^1.11.1",
-    "@mastra/memory": "^1.20.0",
     "react": "^19",
-    "react-dom": "^19",
-    "zod": "^4.4.3"
+    "react-dom": "^19"
   },
   "devDependencies": {
     "@types/bun": "latest",

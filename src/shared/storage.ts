@@ -6,7 +6,7 @@ const DEFAULTS: UserConfig = {
   name: "",
   targetRoles: "",
   industry: "",
-  workspaceFolder: "",
+  resumeFile: "",
   apiKey: "",
 }
 
@@ -30,7 +30,7 @@ export async function hasConfig(): Promise<boolean> {
   return (
     config !== null &&
     (config.name?.length ?? 0) > 0 &&
-    (config.workspaceFolder?.length ?? 0) > 0 &&
+    (config.resumeFile?.length ?? 0) > 0 &&
     (config.apiKey?.length ?? 0) > 0
   )
 }

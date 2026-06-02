@@ -1,6 +1,6 @@
 import { scanPage } from "../services/scanner"
 import { clearConfig } from "./storage"
-import { clearWorkspaceHandle } from "./filesystem"
+import { clearStoredFile } from "./filesystem"
 
 async function apiCall<T>(
   endpoint: string,
@@ -87,35 +87,29 @@ export async function extractPageText(): Promise<{
 }
 
 export async function resetSession(): Promise<void> {
-  await clearWorkspaceHandle()
+  await clearStoredFile()
   await clearConfig()
-}
-
-export async function requestProfile(
-  files: { name: string; content: string }[],
-  apiKey: string
-): Promise<string> {
-  const data = await apiCall<{ profile: string }>(
-    "/api/profile",
-    { files: JSON.stringify(files), apiKey },
-    "Profile agent"
-  )
-  return data.profile
-}
-
-export async function requestResumeWrite(
-  apiKey: string
-): Promise<{ result: string; steps: number }> {
-  return apiCall("/api/write-resume", { apiKey }, "Resume writer")
 }
 
 export async function requestPostingAnalysis(
   text: string,
   apiKey: string
-): Promise<{ result: string; steps: number }> {
+): Promise<{ analysis: string; steps: number }> {
   return apiCall(
     "/api/analyze-posting",
     { text, apiKey },
     "Posting analysis"
+  )
+}
+
+export async function requestResumeWrite(
+  file: { name: string; content: string },
+  analysis: string,
+  apiKey: string
+): Promise<{ typ: string; steps: number }> {
+  return apiCall(
+    "/api/write-resume",
+    { file: JSON.stringify(file), analysis, apiKey },
+    "Resume writer"
   )
 }

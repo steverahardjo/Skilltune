@@ -2,7 +2,7 @@ export interface UserConfig {
   name: string
   targetRoles: string
   industry: string
-  workspaceFolder: string
+  resumeFile: string
   apiKey: string
 }
 

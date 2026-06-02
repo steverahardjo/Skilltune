@@ -5,12 +5,11 @@ import { loadConfig } from "../shared/storage"
 import {
   scanCurrentPage,
   extractPageText,
-  requestProfile,
   requestResumeWrite,
   requestPostingAnalysis,
   resetSession,
 } from "../shared/scan"
-import { readWorkspaceFiles } from "../shared/filesystem"
+import { readResumeFile } from "../shared/filesystem"
 
 interface Props {
   onRescanSetup: () => void
@@ -19,36 +18,16 @@ interface Props {
 export function Dashboard({ onRescanSetup }: Props) {
   const [config, setConfig] = useState<UserConfig | null>(null)
   const [scanning, setScanning] = useState(false)
-  const [profiling, setProfiling] = useState(false)
   const [analyzing, setAnalyzing] = useState(false)
   const [writing, setWriting] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [saved, setSaved] = useState(false)
-  const [profile, setProfile] = useState<string | null>(null)
   const [analysis, setAnalysis] = useState<string | null>(null)
-  const [resumeResult, setResumeResult] = useState<string | null>(null)
+  const [typSource, setTypSource] = useState<string | null>(null)
 
   useEffect(() => {
     loadConfig().then(setConfig)
   }, [])
-
-  const runProfile = async (cfg: UserConfig) => {
-    if (!cfg.apiKey) return
-    setProfiling(true)
-    setError(null)
-    setProfile(null)
-    setResumeResult(null)
-    try {
-      const files = await readWorkspaceFiles()
-      console.log("[dashboard] Read", files.length, "workspace files:", files.map(f => f.name).join(", "))
-      const result = await requestProfile(files, cfg.apiKey)
-      setProfile(result)
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "Profile failed")
-    } finally {
-      setProfiling(false)
-    }
-  }
 
   const handleScan = async () => {
     setScanning(true)
@@ -69,11 +48,12 @@ export function Dashboard({ onRescanSetup }: Props) {
     setAnalyzing(true)
     setError(null)
     setAnalysis(null)
+    setTypSource(null)
     try {
       const page = await extractPageText()
       if (!page.text) throw new Error("No text found on this page")
       const result = await requestPostingAnalysis(page.text, config.apiKey)
-      setAnalysis(result.result)
+      setAnalysis(result.analysis)
     } catch (e) {
       setError(e instanceof Error ? e.message : "Analysis failed")
     } finally {
@@ -81,19 +61,16 @@ export function Dashboard({ onRescanSetup }: Props) {
     }
   }
 
-  const handleRedoProfile = async () => {
-    if (!config) return
-    await runProfile(config)
-  }
-
   const handleWriteResume = async () => {
-    if (!config?.apiKey) return
+    if (!config?.apiKey || !analysis) return
     setWriting(true)
     setError(null)
-    setResumeResult(null)
+    setTypSource(null)
     try {
-      const result = await requestResumeWrite(config.apiKey)
-      setResumeResult(result.result)
+      const file = await readResumeFile()
+      console.log("[dashboard] Resume file:", file.name, file.content.length, "chars")
+      const result = await requestResumeWrite(file, analysis, config.apiKey)
+      setTypSource(result.typ)
     } catch (e) {
       setError(e instanceof Error ? e.message : "Write resume failed")
     } finally {
@@ -101,11 +78,21 @@ export function Dashboard({ onRescanSetup }: Props) {
     }
   }
 
+  const handleDownload = () => {
+    if (!typSource) return
+    const blob = new Blob([typSource], { type: "text/plain" })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement("a")
+    a.href = url
+    a.download = "resume_tailored.typ"
+    a.click()
+    URL.revokeObjectURL(url)
+  }
+
   const handleReset = async () => {
     setError(null)
-    setProfile(null)
     setAnalysis(null)
-    setResumeResult(null)
+    setTypSource(null)
     setSaved(false)
     setConfig(null)
     await resetSession()
@@ -113,10 +100,6 @@ export function Dashboard({ onRescanSetup }: Props) {
   }
 
   if (!config) return null
-
-  const hasProfile = profile !== null
-  const hasAnalysis = analysis !== null
-  const readyToWrite = hasProfile && hasAnalysis
 
   return (
     <div className="google-popup">
@@ -161,42 +144,10 @@ export function Dashboard({ onRescanSetup }: Props) {
         )}
       </button>
 
-      {profiling && !profile ? (
-        <div className="profile-loading">
-          <div className="spinner" style={{ width: 18, height: 18, borderWidth: 2 }} />
-          <span>Building your profile...</span>
-        </div>
-      ) : (
-        <button className={`profile-btn ${profile ? "redo-btn" : ""}`} onClick={handleRedoProfile} disabled={profiling}>
-          {profiling ? (
-            <>
-              <div className="spinner" style={{ width: 18, height: 18, borderWidth: 2 }} />
-              Re-profiling...
-            </>
-          ) : profile ? (
-            <>
-              <svg className="profile-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
-                <circle cx="12" cy="7" r="4" />
-              </svg>
-              Redo profile
-            </>
-          ) : (
-            <>
-              <svg className="profile-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
-                <circle cx="12" cy="7" r="4" />
-              </svg>
-              Profile me
-            </>
-          )}
-        </button>
-      )}
-
       <button
-        className={`write-btn ${readyToWrite ? "" : "disabled"}`}
+        className={`write-btn ${analysis ? "" : "disabled"}`}
         onClick={handleWriteResume}
-        disabled={writing || !readyToWrite}
+        disabled={writing || !analysis}
       >
         {writing ? (
           <>
@@ -240,22 +191,24 @@ export function Dashboard({ onRescanSetup }: Props) {
         </div>
       )}
 
-      {profile && (
-        <div className="profile-result">
-          <pre className="profile-text">{profile}</pre>
-        </div>
-      )}
-
-      {resumeResult && (
+      {typSource && (
         <div className="profile-result" style={{ borderColor: "#0d904f" }}>
-          <pre className="profile-text">{resumeResult}</pre>
+          <pre className="profile-text">{typSource}</pre>
+          <button className="download-btn" onClick={handleDownload}>
+            <svg className="download-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+              <polyline points="7,10 12,15 17,10" />
+              <line x1="12" y1="15" x2="12" y2="3" />
+            </svg>
+            Download .typ
+          </button>
         </div>
       )}
 
       <div className="info-card">
         <div className="info-row">
-          <span className="info-label">Workspace</span>
-          <span className="info-value">{config.workspaceFolder}</span>
+          <span className="info-label">Resume</span>
+          <span className="info-value">{config.resumeFile}</span>
         </div>
         <div className="info-divider" />
         <div className="info-row">

@@ -27,16 +27,6 @@ function clearDeepSeekEnv() {
   delete process.env.DEEPSEEK_API_KEY
 }
 
-const RESOURCE_ID = "default-user"
-const THREAD_PROFILE = "profile-session"
-
-const memoryOpts = {
-  memory: {
-    thread: THREAD_PROFILE,
-    resource: RESOURCE_ID,
-  },
-}
-
 function logPrompt(label: string, prompt: string) {
   const bytes = Buffer.byteLength(prompt, "utf-8")
   const kb = (bytes / 1024).toFixed(1)
@@ -70,99 +60,6 @@ const server = serve({
       },
     },
 
-    "/api/profile": {
-      async POST(req) {
-        try {
-          const body = await req.json()
-          const { files } = body as { files?: string }
-          let { apiKey } = body as { apiKey?: string }
-
-          if (!files) {
-            return Response.json({ error: "Missing 'files'" }, { status: 400 })
-          }
-          if (!apiKey) apiKey = (await loadApiKey()) ?? undefined
-          if (!apiKey) {
-            return Response.json(
-              { error: "No API key. Run onboarding first." },
-              { status: 400 }
-            )
-          }
-
-          setDeepSeekEnv(apiKey)
-
-          const parsed: { name: string; content: string }[] = JSON.parse(files)
-          console.log(`[api/profile] Received ${parsed.length} files: ${parsed.map(f => f.name).join(", ")}`)
-
-          const BATCH_SIZE = 3
-          const agent = mastra.getAgentById("profiling-agent")
-          const results: string[] = []
-
-          for (let i = 0; i < parsed.length; i += BATCH_SIZE) {
-            const batch = parsed.slice(i, i + BATCH_SIZE)
-            const batchNum = Math.floor(i / BATCH_SIZE) + 1
-            const totalBatches = Math.ceil(parsed.length / BATCH_SIZE)
-
-            const fileList = batch
-              .map((f) => `\n--- ${f.name} ---\n${f.content.replace(/\n{2,}/g, "\n")}`)
-              .join("\n")
-
-            const prompt =
-              batchNum === 1
-                ? `First batch (${batchNum}/${totalBatches}). Build a profile from these files. Store everything in working memory:\n${fileList}`
-                : `Batch ${batchNum}/${totalBatches}. Read these files and UPDATE working memory with any new information. Build on what's already there:\n${fileList}`
-
-            logPrompt(`profile batch ${batchNum}/${totalBatches}`, prompt)
-
-            const result = await agent.generate(prompt, memoryOpts)
-            console.log(`[api/profile] Batch ${batchNum}/${totalBatches} done. steps: ${result.steps?.length}`)
-            results.push(result.text)
-          }
-
-          console.log(`[api/profile] All ${Math.ceil(parsed.length / BATCH_SIZE)} batches complete`)
-          clearDeepSeekEnv()
-          return Response.json({ profile: results.join("\n\n") })
-        } catch (err) {
-          const message = err instanceof Error ? err.message : "Unknown error"
-          return Response.json({ error: message }, { status: 500 })
-        }
-      },
-    },
-
-    "/api/write-resume": {
-      async POST(req) {
-        try {
-          const body = await req.json()
-          let { apiKey } = body as { apiKey?: string }
-
-          if (!apiKey) apiKey = (await loadApiKey()) ?? undefined
-          if (!apiKey) {
-            return Response.json(
-              { error: "No API key. Run onboarding first." },
-              { status: 400 }
-            )
-          }
-
-          setDeepSeekEnv(apiKey)
-
-          const prompt = `Generate a tailored resume based on the user profile and job posting in your working memory.`
-          logPrompt("write-resume", prompt)
-
-          const agent = mastra.getAgentById("resume-writer")
-          const result = await agent.generate(prompt, memoryOpts)
-
-          clearDeepSeekEnv()
-
-          return Response.json({
-            result: result.text,
-            steps: result.steps?.length ?? 0,
-          })
-        } catch (err) {
-          const message = err instanceof Error ? err.message : "Unknown error"
-          return Response.json({ error: message }, { status: 500 })
-        }
-      },
-    },
-
     "/api/analyze-posting": {
       async POST(req) {
         try {
@@ -183,16 +80,72 @@ const server = serve({
 
           setDeepSeekEnv(apiKey)
 
-          const prompt = `Analyze this job posting and extract all details into working memory:\n\n${text.replace(/\n{2,}/g, "\n")}`
+          const prompt = `Analyze this job posting:\n\n${text.replace(/\n{2,}/g, "\n")}`
           logPrompt("analyze-posting", prompt)
 
           const agent = mastra.getAgentById("posting-analysis")
-          const result = await agent.generate(prompt, memoryOpts)
+          const result = await agent.generate(prompt)
 
           clearDeepSeekEnv()
 
           return Response.json({
-            result: result.text,
+            analysis: result.text,
+            steps: result.steps?.length ?? 0,
+          })
+        } catch (err) {
+          const message = err instanceof Error ? err.message : "Unknown error"
+          return Response.json({ error: message }, { status: 500 })
+        }
+      },
+    },
+
+    "/api/write-resume": {
+      async POST(req) {
+        try {
+          const body = await req.json()
+          const { file, analysis } = body as { file?: string; analysis?: string }
+          let { apiKey } = body as { apiKey?: string }
+
+          if (!file) {
+            return Response.json({ error: "Missing 'file'" }, { status: 400 })
+          }
+          if (!analysis) {
+            return Response.json({ error: "Missing 'analysis'" }, { status: 400 })
+          }
+          if (!apiKey) apiKey = (await loadApiKey()) ?? undefined
+          if (!apiKey) {
+            return Response.json(
+              { error: "No API key. Run onboarding first." },
+              { status: 400 }
+            )
+          }
+
+          setDeepSeekEnv(apiKey)
+
+          const parsed: { name: string; content: string } = JSON.parse(file)
+          console.log(`[api/write] Resume: ${parsed.name} (${parsed.content.length} chars)`)
+          console.log(`[api/write] Analysis: ${analysis.length} chars`)
+
+          const prompt = `Write a tailored Typst resume.
+
+CURRENT RESUME:
+--- ${parsed.name} ---
+${parsed.content}
+--- End of resume ---
+
+JOB POSTING ANALYSIS:
+${analysis}
+
+Generate the tailored Typst source code.`
+          logPrompt("write-resume", prompt)
+
+          const agent = mastra.getAgentById("resume-writer")
+          const result = await agent.generate(prompt)
+
+          clearDeepSeekEnv()
+
+          return Response.json({
+            typ: result.text,
             steps: result.steps?.length ?? 0,
           })
         } catch (err) {

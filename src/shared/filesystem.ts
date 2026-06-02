@@ -1,6 +1,7 @@
 const DB_NAME = "resume-adjuster"
 const DB_VERSION = 1
-const HANDLE_STORE = "directory-handles"
+const HANDLE_STORE = "resume-handle"
+const HANDLE_KEY = "resume"
 
 function openDB(): Promise<IDBDatabase> {
   return new Promise((resolve, reject) => {
@@ -13,47 +14,41 @@ function openDB(): Promise<IDBDatabase> {
   })
 }
 
-export async function pickWorkspaceFolder(): Promise<string | null> {
-  if ("showDirectoryPicker" in window) {
-    try {
-      const handle = await (window as any).showDirectoryPicker({ mode: "read" })
-      const db = await openDB()
-      await new Promise<void>((resolve, reject) => {
-        const tx = db.transaction(HANDLE_STORE, "readwrite")
-        tx.objectStore(HANDLE_STORE).put(handle, "workspace")
-        tx.oncomplete = () => resolve()
-        tx.onerror = () => reject(tx.error)
-      })
-      db.close()
-      return handle.name
-    } catch (err) {
-      const e = err as DOMException
-      if (e.name === "AbortError") return null
-      throw err
-    }
-  }
+const SUPPORTED_EXTS = new Set([".pdf", ".typ", ".tex", ".docx"])
 
-  return fallbackFileInput()
+function hasSupportedExt(name: string): boolean {
+  return SUPPORTED_EXTS.has(name.toLowerCase().slice(name.lastIndexOf(".")))
 }
 
-function fallbackFileInput(): Promise<string | null> {
+export async function pickResumeFile(): Promise<string | null> {
   return new Promise((resolve) => {
     const input = document.createElement("input")
     input.type = "file"
-    input.webkitdirectory = true
+    input.accept = ".pdf,.typ,.tex,.docx"
     input.style.display = "none"
     document.body.appendChild(input)
 
     input.onchange = async () => {
-      const files = input.files
+      const file = input.files?.[0]
       input.remove()
-      if (files && files.length > 0) {
-        const path = files[0]!.webkitRelativePath
-        const root = path.split("/")[0] ?? path
-        resolve(root)
-      } else {
+      if (!file || !hasSupportedExt(file.name)) {
         resolve(null)
+        return
       }
+      try {
+        const db = await openDB()
+        await new Promise<void>((resolveStore, rejectStore) => {
+          const tx = db.transaction(HANDLE_STORE, "readwrite")
+          tx.objectStore(HANDLE_STORE).put(file, HANDLE_KEY)
+          tx.oncomplete = () => resolveStore()
+          tx.onerror = () => rejectStore(tx.error)
+        })
+        db.close()
+      } catch {
+        resolve(null)
+        return
+      }
+      resolve(file.name)
     }
 
     input.oncancel = () => {
@@ -65,125 +60,52 @@ function fallbackFileInput(): Promise<string | null> {
   })
 }
 
-export async function getStoredHandle(): Promise<FileSystemDirectoryHandle | null> {
+async function getStoredFile(): Promise<File | null> {
   const db = await openDB()
   return new Promise((resolve, reject) => {
     const tx = db.transaction(HANDLE_STORE, "readonly")
-    const req = tx.objectStore(HANDLE_STORE).get("workspace")
+    const req = tx.objectStore(HANDLE_STORE).get(HANDLE_KEY)
     req.onsuccess = () => resolve(req.result ?? null)
     req.onerror = () => reject(req.error)
     tx.oncomplete = () => db.close()
   })
 }
 
-export async function getWorkspaceHandle(): Promise<FileSystemDirectoryHandle | null> {
-  return getStoredHandle()
+export async function readResumeFile(): Promise<{ name: string; content: string }> {
+  console.log("[fs] ▶ readResumeFile — getting stored file")
+  const file = await getStoredFile()
+  if (!file) {
+    throw new Error(
+      "No resume file found.\n→ Run onboarding again to pick a resume file."
+    )
+  }
+  console.log(`[fs] Resume: "${file.name}" (${file.size} bytes)`)
+
+  const ext = file.name.toLowerCase().slice(file.name.lastIndexOf("."))
+
+  if (ext === ".pdf" || ext === ".docx") {
+    console.log(`[fs] Binary format (${ext}) — sending file name only. Full parsing not implemented yet.`)
+    return {
+      name: file.name,
+      content: `[Binary file: ${file.name} (${ext.toUpperCase()}, ${file.size} bytes). Full text extraction not available yet. Please provide a .typ, .tex, or .txt version for best results.]`,
+    }
+  }
+
+  const text = await file.text()
+  const content = text.slice(0, 3000).trim()
+  console.log(`[fs] ◀ Read ${content.length} chars from "${file.name}"`)
+  return { name: file.name, content }
 }
 
-export async function clearWorkspaceHandle(): Promise<void> {
+export async function clearStoredFile(): Promise<void> {
   const db = await openDB()
   return new Promise((resolve, reject) => {
     const tx = db.transaction(HANDLE_STORE, "readwrite")
-    tx.objectStore(HANDLE_STORE).delete("workspace")
+    tx.objectStore(HANDLE_STORE).delete(HANDLE_KEY)
     tx.oncomplete = () => {
       db.close()
       resolve()
     }
     tx.onerror = () => reject(tx.error)
   })
-}
-
-const READABLE_EXTENSIONS = new Set([
-  ".txt", ".md", ".json", ".csv", ".yaml", ".yml",
-  ".html", ".xml", ".log", ".typ", ".tex", ".typst",
-])
-
-const MAX_FILE_CHARS = 1500
-const MAX_TOTAL_FILES = 10
-const PRIORITY_NAMES = [
-  "resume", "cv", "cover", "job", "posting", "career",
-  "profile", "about", "skills", "experience", "portfolio",
-]
-
-export async function readWorkspaceFiles(): Promise<
-  { name: string; content: string }[]
-> {
-  console.log("[fs] ▶ readWorkspaceFiles — getting stored handle")
-  const handle = await getWorkspaceHandle()
-  if (!handle) {
-    console.error("[fs] ✗ No workspace handle stored")
-    throw new Error(
-      "No workspace folder selected.\n→ Run onboarding again to pick a workspace folder."
-    )
-  }
-  console.log(`[fs] Reading from workspace: "${handle.name}"`)
-
-  try {
-    const perms = handle as any
-    const current = typeof perms.queryPermission === "function"
-      ? (await perms.queryPermission({ mode: "read" }))
-      : "granted"
-
-    if (current !== "granted") {
-      console.log(`[fs] Permission is "${current}", requesting...`)
-      if (typeof perms.requestPermission !== "function") {
-        throw new Error(
-          "Browser does not support File System Access permission API.\n→ Try Chrome 86+ or re-pick the folder in onboarding."
-        )
-      }
-      const requested = await perms.requestPermission({ mode: "read" })
-      if (requested !== "granted") {
-        throw new Error(
-          `Workspace permission denied (${requested}).\n→ Click 'Profile me' and allow access to the folder.`
-        )
-      }
-      console.log("[fs] Permission granted after request")
-    }
-  } catch (e) {
-    if (e instanceof Error) throw e
-    throw new Error(`File System Access error\n→ ${String(e)}`)
-  }
-
-  console.log("[fs] Walking directory...")
-
-  const allFiles: { name: string; content: string }[] = []
-
-  async function walk(dir: FileSystemDirectoryHandle) {
-    for await (const [name, entry] of dir.entries()) {
-      if (entry.kind === "directory" && !name.startsWith(".")) {
-        await walk(entry as FileSystemDirectoryHandle)
-      } else if (entry.kind === "file" && !name.startsWith(".")) {
-        const ext = name.toLowerCase().slice(name.lastIndexOf("."))
-        if (READABLE_EXTENSIONS.has(ext)) {
-          try {
-            const file = await (entry as FileSystemFileHandle).getFile()
-            const text = (await file.text()).slice(0, MAX_FILE_CHARS).trim()
-            if (text.length > 0) {
-              allFiles.push({ name, content: text })
-            }
-          } catch {
-            // skip unreadable
-          }
-        }
-      }
-    }
-  }
-
-  await walk(handle)
-
-  const priorityScore = (name: string): number => {
-    const lower = name.toLowerCase()
-    for (let i = 0; i < PRIORITY_NAMES.length; i++) {
-      if (lower.includes(PRIORITY_NAMES[i]!)) return PRIORITY_NAMES.length - i
-    }
-    return 0
-  }
-
-  const sorted = allFiles.sort(
-    (a, b) => priorityScore(b.name) - priorityScore(a.name)
-  )
-
-  const result = sorted.slice(0, MAX_TOTAL_FILES)
-  console.log(`[fs] ◀ Found ${allFiles.length} files, returning ${result.length}: ${result.map(f => f.name).join(", ") || "(none)"}`)
-  return result
 }

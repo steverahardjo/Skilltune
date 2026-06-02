@@ -2,7 +2,7 @@ import "./theme.css"
 import { useState, useEffect } from "react"
 import type { UserConfig } from "../shared/types"
 import { loadConfig, saveConfig } from "../shared/storage"
-import { pickWorkspaceFolder } from "../shared/filesystem"
+import { pickResumeFile } from "../shared/filesystem"
 
 interface Props {
   onComplete: () => void
@@ -18,7 +18,7 @@ export function Onboarding({ onComplete }: Props) {
     name: "",
     targetRoles: "",
     industry: "",
-    workspaceFolder: "",
+    resumeFile: "",
     apiKey: "",
   })
 
@@ -27,7 +27,7 @@ export function Onboarding({ onComplete }: Props) {
       if (saved) {
         setConfig(saved)
         if (saved.apiKey) setStep(3)
-        else if (saved.workspaceFolder) setStep(3)
+        else if (saved.resumeFile) setStep(3)
         else if (saved.name) setStep(2)
         else setStep(1)
       }
@@ -46,17 +46,17 @@ export function Onboarding({ onComplete }: Props) {
 
   const canNext = (s: number): boolean => {
     if (s === 1) return config.name.trim().length > 0
-    if (s === 2) return config.workspaceFolder.trim().length > 0
+    if (s === 2) return config.resumeFile.trim().length > 0
     if (s === 3) return config.apiKey.trim().length > 0
     return false
   }
 
-  const handlePickFolder = async () => {
+  const handlePickFile = async () => {
     setPicking(true)
-    const folder = await pickWorkspaceFolder()
+    const file = await pickResumeFile()
     setPicking(false)
-    if (folder) {
-      await persist({ workspaceFolder: folder })
+    if (file) {
+      await persist({ resumeFile: file })
     }
   }
 
@@ -149,27 +149,26 @@ export function Onboarding({ onComplete }: Props) {
 
       {step === 2 && (
         <>
-          <h2 className="form-heading">Workspace folder</h2>
-          <p className="form-sub">Pick the folder with your resume and job postings</p>
+          <h2 className="form-heading">Resume file</h2>
+          <p className="form-sub">Pick your resume for profiling</p>
 
-          <button className="folder-picker" onClick={handlePickFolder} disabled={picking}>
+          <button className="folder-picker" onClick={handlePickFile} disabled={picking}>
             <svg className="folder-icon" viewBox="0 0 24 24" fill="currentColor">
-              <path d="M10 4H4c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V8c0-1.1-.9-2-2-2h-8l-2-2z" />
+              <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+              <polyline points="14,2 14,8 20,8" />
             </svg>
-            <span>{picking ? "Opening..." : config.workspaceFolder || "Choose folder"}</span>
+            <span>{picking ? "Opening..." : config.resumeFile || "Choose file"}</span>
           </button>
 
-          {config.workspaceFolder && (
+          {config.resumeFile && (
             <div className="folder-confirm">
               <div className="folder-path-row">
                 <svg className="folder-path-icon" viewBox="0 0 24 24" fill="currentColor">
-                  <path d="M10 4H4c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V8c0-1.1-.9-2-2-2h-8l-2-2z" />
+                  <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+                  <polyline points="14,2 14,8 20,8" />
                 </svg>
-                <span className="folder-path-name">{config.workspaceFolder}</span>
+                <span className="folder-path-name">{config.resumeFile}</span>
               </div>
-              <p className="folder-path-hint">
-                Resume and job postings will be read from this folder
-              </p>
             </div>
           )}
 
@@ -178,8 +177,8 @@ export function Onboarding({ onComplete }: Props) {
               <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-6h2v6zm0-8h-2V7h2v2z" />
             </svg>
             <p className="hint-text">
-              Keep your resume and job postings in one folder. We'll read
-              everything from there when you scan a listing.
+              Supported formats: <strong>.pdf</strong>, <strong>.typ</strong>, <strong>.tex</strong>, <strong>.docx</strong>.
+              Best results with .typ or .tex files.
             </p>
           </div>
         </>

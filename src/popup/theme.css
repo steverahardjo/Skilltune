@@ -880,3 +880,33 @@ body {
   width: 100%;
   margin-top: 4px;
 }
+
+/* ---------- Download button ---------- */
+
+.download-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  width: 100%;
+  margin-top: 10px;
+  padding: 10px 0;
+  font-size: 13px;
+  font-weight: 500;
+  font-family: var(--md-font-family);
+  color: var(--md-on-primary);
+  background: #0d904f;
+  border: none;
+  border-radius: 10px;
+  cursor: pointer;
+  transition: background 180ms ease;
+}
+
+.download-btn:hover {
+  background: #0b8043;
+}
+
+.download-icon {
+  width: 16px;
+  height: 16px;
+}
