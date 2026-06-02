@@ -93,20 +93,34 @@ const server = serve({
           const parsed: { name: string; content: string }[] = JSON.parse(files)
           console.log(`[api/profile] Received ${parsed.length} files: ${parsed.map(f => f.name).join(", ")}`)
 
-          const fileList = parsed
-            .map((f) => `\n--- ${f.name} ---\n${f.content.replace(/\n{2,}/g, "\n")}`)
-            .join("\n")
-
-          const prompt = `Build a professional profile from these workspace files:\n${fileList}`
-          logPrompt("profile", prompt)
-
+          const BATCH_SIZE = 3
           const agent = mastra.getAgentById("profiling-agent")
-          const result = await agent.generate(prompt, memoryOpts)
+          const results: string[] = []
 
-          console.log("[api/profile] Done. steps:", result.steps?.length)
+          for (let i = 0; i < parsed.length; i += BATCH_SIZE) {
+            const batch = parsed.slice(i, i + BATCH_SIZE)
+            const batchNum = Math.floor(i / BATCH_SIZE) + 1
+            const totalBatches = Math.ceil(parsed.length / BATCH_SIZE)
 
+            const fileList = batch
+              .map((f) => `\n--- ${f.name} ---\n${f.content.replace(/\n{2,}/g, "\n")}`)
+              .join("\n")
+
+            const prompt =
+              batchNum === 1
+                ? `First batch (${batchNum}/${totalBatches}). Build a profile from these files. Store everything in working memory:\n${fileList}`
+                : `Batch ${batchNum}/${totalBatches}. Read these files and UPDATE working memory with any new information. Build on what's already there:\n${fileList}`
+
+            logPrompt(`profile batch ${batchNum}/${totalBatches}`, prompt)
+
+            const result = await agent.generate(prompt, memoryOpts)
+            console.log(`[api/profile] Batch ${batchNum}/${totalBatches} done. steps: ${result.steps?.length}`)
+            results.push(result.text)
+          }
+
+          console.log(`[api/profile] All ${Math.ceil(parsed.length / BATCH_SIZE)} batches complete`)
           clearDeepSeekEnv()
-          return Response.json({ profile: result.text })
+          return Response.json({ profile: results.join("\n\n") })
         } catch (err) {
           const message = err instanceof Error ? err.message : "Unknown error"
           return Response.json({ error: message }, { status: 500 })
