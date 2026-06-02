@@ -3,7 +3,10 @@ import { z } from "zod"
 import { readdir, readFile } from "node:fs/promises"
 import { join, extname } from "node:path"
 
-console.log("[read-directory] Module loaded with MAX_FILE_CHARS:", 3000, "MAX_TOTAL_FILES:", 15)
+const MAX_FILE_CHARS = 1500
+const MAX_TOTAL_FILES = 10
+
+console.log("[read-directory] Module loaded — cap:", MAX_FILE_CHARS, "chars/file,", MAX_TOTAL_FILES, "files max")
 
 const READABLE_EXTENSIONS = new Set([
   ".txt", ".md", ".json", ".csv", ".yaml", ".yml",
@@ -16,13 +19,10 @@ const PRIORITY_NAMES = [
   "profile", "about", "skills", "experience", "portfolio",
 ]
 
-const MAX_FILE_CHARS = 3000
-const MAX_TOTAL_FILES = 15
-
 export const readDirectoryTool = createTool({
   id: "read-directory",
   description:
-    "Reads readable files from a given directory. Returns up to 15 files, each capped at 3000 characters. Prioritizes resume, CV, cover letter, and job posting files. Use this to understand the user's workspace.",
+    "Reads readable files from a given directory. Returns up to 10 files, each capped at 1500 chars. Skips hidden files and directories. Prioritizes resume, CV, cover letter, and job posting files.",
   inputSchema: z.object({
     path: z.string().describe("Absolute path to the directory to read"),
   }),
@@ -48,6 +48,7 @@ export const readDirectoryTool = createTool({
           await walk(fullPath)
         } else if (
           entry.isFile() &&
+          !entry.name.startsWith(".") &&
           READABLE_EXTENSIONS.has(extname(entry.name).toLowerCase())
         ) {
           try {

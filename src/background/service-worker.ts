@@ -12,23 +12,31 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
       endpoint: string
       body: Record<string, string>
     }
-    fetch(`${SERVER_URL}${endpoint}`, {
+    const url = `${SERVER_URL}${endpoint}`
+    console.log(`[sw] ▶ POST ${url}`)
+
+    fetch(url, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(body),
     })
       .then(async (res) => {
         const data = await res.json()
+        console.log(`[sw] ◀ ${endpoint} → HTTP ${res.status} ok=${res.ok}`)
+        if (!res.ok) console.log(`[sw] ◀ error body:`, JSON.stringify(data).slice(0, 200))
         sendResponse({ ok: res.ok, status: res.status, data })
       })
       .catch((e) => {
+        console.error(`[sw] ✗ ${endpoint} → ${e.message}`)
         sendResponse({
           ok: false,
           status: 0,
-          data: { error: `Server unreachable: ${e.message}` },
+          data: {
+            error: `Cannot reach Mastra server at ${SERVER_URL}\n→ ${e.message}\n→ Is "bun run dev" running?`,
+          },
         })
       })
-    return true // async sendResponse
+    return true
   }
 
   return false

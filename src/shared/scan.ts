@@ -7,48 +7,58 @@ async function apiCall<T>(
   body: Record<string, string>,
   label: string
 ): Promise<T> {
-  return new Promise((resolve, reject) => {
-    chrome.runtime.sendMessage(
-      { type: "API_CALL", endpoint, body },
-      (response) => {
-        const err = chrome.runtime.lastError
-        if (err) {
-          reject(
-            new Error(
-              `Service worker error\n→ ${label} (${endpoint})\n→ ${err.message}`
-            )
-          )
-          return
-        }
+  console.log(`[apiCall] ▶ ${label}${endpoint}`)
+  console.log(`[apiCall] body keys:`, Object.keys(body))
+  console.log(`[apiCall] body sizes:`, Object.entries(body).map(([k, v]) => `${k}=${v.length}chars`).join(", "))
 
-        if (!response) {
-          reject(
-            new Error(
-              `No response from service worker\n→ ${label} (${endpoint})\n→ Is the extension loaded?`
-            )
-          )
-          return
-        }
+  try {
+    const response = await chrome.runtime.sendMessage({
+      type: "API_CALL",
+      endpoint,
+      body,
+    })
 
-        if (!response.ok) {
-          const detail =
-            response.data?.error ?? JSON.stringify(response.data)
-          reject(
-            new Error(
-              `Server returned ${response.status}\n→ ${label} (${endpoint})\n→ ${detail}`
-            )
-          )
-          return
-        }
+    console.log(`[apiCall] ◀ ${label} ok=${response?.ok} status=${response?.status}`)
+    if (response?.data?.error) console.log(`[apiCall] ◀ error:`, response.data.error)
 
-        resolve(response.data)
-      }
-    )
-  })
+    if (!response) {
+      throw new Error(
+        `Service worker did not respond\n→ ${label} (${endpoint})\n→ Possible: extension not reloaded after changes, or service worker is inactive\n→ Fix: go to chrome://extensions, click reload`
+      )
+    }
+
+    if (!response.ok) {
+      const detail = response.data?.error ?? JSON.stringify(response.data)
+      throw new Error(
+        `Server returned HTTP ${response.status}\n→ ${label} (${endpoint})\n→ ${detail}`
+      )
+    }
+
+    return response.data
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e)
+    console.error(`[apiCall] ✗ ${label} — ${msg}`)
+
+    if (msg.includes("receiving end does not exist") || msg.includes("Could not establish connection")) {
+      throw new Error(
+        `Service worker not reachable\n→ ${label}\n→ Fix: reload extension in chrome://extensions`
+      )
+    }
+
+    throw e
+  }
 }
 
 export async function scanCurrentPage(): Promise<{ screenshot: string }> {
-  return scanPage()
+  console.log("[scan] ▶ Starting screenshot capture")
+  try {
+    const result = await scanPage()
+    console.log("[scan] ◀ Screenshot captured successfully")
+    return result
+  } catch (e) {
+    console.error("[scan] ✗", e)
+    throw e
+  }
 }
 
 export async function extractPageText(): Promise<{
@@ -56,20 +66,23 @@ export async function extractPageText(): Promise<{
   url: string
   text: string
 }> {
+  console.log("[scan] ▶ Extracting page text via content script")
   const [tab] = await chrome.tabs.query({ active: true, currentWindow: true })
-  if (!tab?.id) throw new Error("extractPageText: No active tab")
+  if (!tab?.id) throw new Error("[scan] ✗ No active tab")
+  console.log(`[scan] Active tab: id=${tab.id} url=${tab.url}`)
 
-  const extracted: {
-    title: string
-    url: string
-    text: string
-    company: string | null
-  } = await chrome.tabs.sendMessage(tab.id, { type: "SCAN_PAGE" })
-
-  return {
-    title: extracted.title,
-    url: extracted.url,
-    text: extracted.text,
+  try {
+    const extracted = await chrome.tabs.sendMessage(tab.id, { type: "SCAN_PAGE" })
+    console.log(`[scan] ◀ Extracted ${extracted.text.length} chars from page "${extracted.title}"`)
+    return { title: extracted.title, url: extracted.url, text: extracted.text }
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e)
+    if (msg.includes("receiving end does not exist")) {
+      throw new Error(
+        `Content script not loaded on this page\n→ Navigate to the job posting page, then reopen the extension popup\n→ Or: reload the extension in chrome://extensions`
+      )
+    }
+    throw e
   }
 }
 

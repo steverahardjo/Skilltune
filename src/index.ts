@@ -37,6 +37,21 @@ const memoryOpts = {
   },
 }
 
+function logPrompt(label: string, prompt: string) {
+  const bytes = Buffer.byteLength(prompt, "utf-8")
+  const kb = (bytes / 1024).toFixed(1)
+  console.log(`\n[${label}] Prompt (${kb} KB, ${bytes} bytes)`)
+  console.log("───────────────────────")
+  if (prompt.length > 2000) {
+    console.log(prompt.slice(0, 1000))
+    console.log(`\n... [${prompt.length - 2000} chars trimmed] ...\n`)
+    console.log(prompt.slice(-1000))
+  } else {
+    console.log(prompt)
+  }
+  console.log("───────────────────────\n")
+}
+
 const server = serve({
   port: 3721,
   routes: {
@@ -79,14 +94,14 @@ const server = serve({
           console.log(`[api/profile] Received ${parsed.length} files: ${parsed.map(f => f.name).join(", ")}`)
 
           const fileList = parsed
-            .map((f) => `\n--- ${f.name} ---\n${f.content}`)
+            .map((f) => `\n--- ${f.name} ---\n${f.content.replace(/\n{2,}/g, "\n")}`)
             .join("\n")
 
+          const prompt = `Build a professional profile from these workspace files:\n${fileList}`
+          logPrompt("profile", prompt)
+
           const agent = mastra.getAgentById("profiling-agent")
-          const result = await agent.generate(
-            `Build a professional profile from these workspace files:\n${fileList}`,
-            memoryOpts
-          )
+          const result = await agent.generate(prompt, memoryOpts)
 
           console.log("[api/profile] Done. steps:", result.steps?.length)
 
@@ -115,11 +130,11 @@ const server = serve({
 
           setDeepSeekEnv(apiKey)
 
+          const prompt = `Generate a tailored resume based on the user profile and job posting in your working memory.`
+          logPrompt("write-resume", prompt)
+
           const agent = mastra.getAgentById("resume-writer")
-          const result = await agent.generate(
-            `Generate a tailored resume based on the user profile and job posting in your working memory.`,
-            memoryOpts
-          )
+          const result = await agent.generate(prompt, memoryOpts)
 
           clearDeepSeekEnv()
 
@@ -154,11 +169,11 @@ const server = serve({
 
           setDeepSeekEnv(apiKey)
 
+          const prompt = `Analyze this job posting and extract all details into working memory:\n\n${text.replace(/\n{2,}/g, "\n")}`
+          logPrompt("analyze-posting", prompt)
+
           const agent = mastra.getAgentById("posting-analysis")
-          const result = await agent.generate(
-            `Analyze this job posting and extract all details into working memory:\n\n${text}`,
-            memoryOpts
-          )
+          const result = await agent.generate(prompt, memoryOpts)
 
           clearDeepSeekEnv()
 

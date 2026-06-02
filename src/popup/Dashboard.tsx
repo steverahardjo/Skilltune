@@ -1,5 +1,5 @@
 import "./theme.css"
-import { useState, useEffect, useRef } from "react"
+import { useState, useEffect } from "react"
 import type { UserConfig } from "../shared/types"
 import { loadConfig } from "../shared/storage"
 import {
@@ -27,16 +27,9 @@ export function Dashboard({ onRescanSetup }: Props) {
   const [profile, setProfile] = useState<string | null>(null)
   const [analysis, setAnalysis] = useState<string | null>(null)
   const [resumeResult, setResumeResult] = useState<string | null>(null)
-  const autoProfiled = useRef(false)
 
   useEffect(() => {
-    loadConfig().then((cfg) => {
-      setConfig(cfg)
-      if (cfg && !autoProfiled.current) {
-        autoProfiled.current = true
-        runProfile(cfg)
-      }
-    })
+    loadConfig().then(setConfig)
   }, [])
 
   const runProfile = async (cfg: UserConfig) => {
@@ -109,7 +102,6 @@ export function Dashboard({ onRescanSetup }: Props) {
   }
 
   const handleReset = async () => {
-    autoProfiled.current = false
     setError(null)
     setProfile(null)
     setAnalysis(null)

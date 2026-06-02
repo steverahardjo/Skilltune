@@ -98,8 +98,8 @@ const READABLE_EXTENSIONS = new Set([
   ".html", ".xml", ".log", ".typ", ".tex", ".typst",
 ])
 
-const MAX_FILE_CHARS = 3000
-const MAX_TOTAL_FILES = 15
+const MAX_FILE_CHARS = 1500
+const MAX_TOTAL_FILES = 10
 const PRIORITY_NAMES = [
   "resume", "cv", "cover", "job", "posting", "career",
   "profile", "about", "skills", "experience", "portfolio",
@@ -108,8 +108,43 @@ const PRIORITY_NAMES = [
 export async function readWorkspaceFiles(): Promise<
   { name: string; content: string }[]
 > {
+  console.log("[fs] ▶ readWorkspaceFiles — getting stored handle")
   const handle = await getWorkspaceHandle()
-  if (!handle) throw new Error("No workspace folder selected. Go to onboarding.")
+  if (!handle) {
+    console.error("[fs] ✗ No workspace handle stored")
+    throw new Error(
+      "No workspace folder selected.\n→ Run onboarding again to pick a workspace folder."
+    )
+  }
+  console.log(`[fs] Reading from workspace: "${handle.name}"`)
+
+  try {
+    const perms = handle as any
+    const current = typeof perms.queryPermission === "function"
+      ? (await perms.queryPermission({ mode: "read" }))
+      : "granted"
+
+    if (current !== "granted") {
+      console.log(`[fs] Permission is "${current}", requesting...`)
+      if (typeof perms.requestPermission !== "function") {
+        throw new Error(
+          "Browser does not support File System Access permission API.\n→ Try Chrome 86+ or re-pick the folder in onboarding."
+        )
+      }
+      const requested = await perms.requestPermission({ mode: "read" })
+      if (requested !== "granted") {
+        throw new Error(
+          `Workspace permission denied (${requested}).\n→ Click 'Profile me' and allow access to the folder.`
+        )
+      }
+      console.log("[fs] Permission granted after request")
+    }
+  } catch (e) {
+    if (e instanceof Error) throw e
+    throw new Error(`File System Access error\n→ ${String(e)}`)
+  }
+
+  console.log("[fs] Walking directory...")
 
   const allFiles: { name: string; content: string }[] = []
 
@@ -117,7 +152,7 @@ export async function readWorkspaceFiles(): Promise<
     for await (const [name, entry] of dir.entries()) {
       if (entry.kind === "directory" && !name.startsWith(".")) {
         await walk(entry as FileSystemDirectoryHandle)
-      } else if (entry.kind === "file") {
+      } else if (entry.kind === "file" && !name.startsWith(".")) {
         const ext = name.toLowerCase().slice(name.lastIndexOf("."))
         if (READABLE_EXTENSIONS.has(ext)) {
           try {
@@ -148,5 +183,7 @@ export async function readWorkspaceFiles(): Promise<
     (a, b) => priorityScore(b.name) - priorityScore(a.name)
   )
 
-  return sorted.slice(0, MAX_TOTAL_FILES)
+  const result = sorted.slice(0, MAX_TOTAL_FILES)
+  console.log(`[fs] ◀ Found ${allFiles.length} files, returning ${result.length}: ${result.map(f => f.name).join(", ") || "(none)"}`)
+  return result
 }
