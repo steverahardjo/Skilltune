@@ -11,6 +11,7 @@
     "start": "NODE_ENV=production bun src/index.ts"
   },
   "dependencies": {
+    "@ai-sdk/deepseek": "^2.0.35",
     "@mastra/core": "^1.37.1",
     "@mastra/libsql": "^1.11.1",
     "@mastra/memory": "^1.20.0",

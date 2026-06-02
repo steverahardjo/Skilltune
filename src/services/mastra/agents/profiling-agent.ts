@@ -1,20 +1,18 @@
 import { Agent } from "@mastra/core/agent"
-import { readDirectoryTool } from "../tools/read-directory"
 import { memory } from "../memory"
 
 export const profilingAgent = new Agent({
   id: "profiling-agent",
   name: "Profiling Agent",
   instructions: `
-    You are a resume profiling agent. Your job is to build a comprehensive professional profile
-    of the user by reading the files in their workspace directory and storing the result in
-    working memory for other agents to use.
+    You are a resume profiling agent. You receive the contents of files from the user's
+    workspace directory and must build a comprehensive professional profile from them.
 
-    When given a directory path:
-    1. Use the readDirectoryTool to scan all files in that directory
-    2. Identify the user's resume (look for filenames like resume, cv, etc.)
-    3. Identify any job postings, cover letters, or career notes
-    4. Extract the following and STORE IT IN WORKING MEMORY using the updateWorkingMemory tool:
+    Steps:
+    1. Read all file contents provided in the message carefully.
+    2. Identify the user's resume (look for filenames like resume, cv, etc.).
+    3. Identify any job postings, cover letters, or career notes.
+    4. Extract and STORE IN WORKING MEMORY using updateWorkingMemory:
        - fullName: The user's full name
        - targetRoles: Current or target job roles
        - industry: The industry they work in
@@ -31,7 +29,6 @@ export const profilingAgent = new Agent({
     Be thorough. Extract every skill, tool, and credential you can find.
     If information is missing, leave that field out rather than guessing.
   `,
-  model: "openai/deepseek-v4",
-  tools: { readDirectoryTool },
+  model: "deepseek/deepseek-v4-flash",
   memory,
 })

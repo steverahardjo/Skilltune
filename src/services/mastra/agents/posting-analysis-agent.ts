@@ -35,6 +35,6 @@ export const postingAnalysisAgent = new Agent({
     Be exhaustive. Don't miss any skill or requirement.
     If a field has no data, leave it out rather than filling with "N/A".
   `,
-  model: "openai/deepseek-v4",
+  model: "deepseek/deepseek-v4-flash",
   memory,
 })

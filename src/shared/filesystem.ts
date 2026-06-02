@@ -92,3 +92,61 @@ export async function clearWorkspaceHandle(): Promise<void> {
     tx.onerror = () => reject(tx.error)
   })
 }
+
+const READABLE_EXTENSIONS = new Set([
+  ".txt", ".md", ".json", ".csv", ".yaml", ".yml",
+  ".html", ".xml", ".log", ".typ", ".tex", ".typst",
+])
+
+const MAX_FILE_CHARS = 3000
+const MAX_TOTAL_FILES = 15
+const PRIORITY_NAMES = [
+  "resume", "cv", "cover", "job", "posting", "career",
+  "profile", "about", "skills", "experience", "portfolio",
+]
+
+export async function readWorkspaceFiles(): Promise<
+  { name: string; content: string }[]
+> {
+  const handle = await getWorkspaceHandle()
+  if (!handle) throw new Error("No workspace folder selected. Go to onboarding.")
+
+  const allFiles: { name: string; content: string }[] = []
+
+  async function walk(dir: FileSystemDirectoryHandle) {
+    for await (const [name, entry] of dir.entries()) {
+      if (entry.kind === "directory" && !name.startsWith(".")) {
+        await walk(entry as FileSystemDirectoryHandle)
+      } else if (entry.kind === "file") {
+        const ext = name.toLowerCase().slice(name.lastIndexOf("."))
+        if (READABLE_EXTENSIONS.has(ext)) {
+          try {
+            const file = await (entry as FileSystemFileHandle).getFile()
+            const text = (await file.text()).slice(0, MAX_FILE_CHARS).trim()
+            if (text.length > 0) {
+              allFiles.push({ name, content: text })
+            }
+          } catch {
+            // skip unreadable
+          }
+        }
+      }
+    }
+  }
+
+  await walk(handle)
+
+  const priorityScore = (name: string): number => {
+    const lower = name.toLowerCase()
+    for (let i = 0; i < PRIORITY_NAMES.length; i++) {
+      if (lower.includes(PRIORITY_NAMES[i]!)) return PRIORITY_NAMES.length - i
+    }
+    return 0
+  }
+
+  const sorted = allFiles.sort(
+    (a, b) => priorityScore(b.name) - priorityScore(a.name)
+  )
+
+  return sorted.slice(0, MAX_TOTAL_FILES)
+}

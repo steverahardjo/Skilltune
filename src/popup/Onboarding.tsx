@@ -69,6 +69,15 @@ export function Onboarding({ onComplete }: Props) {
 
   const handleFinish = async () => {
     await persist()
+    try {
+      chrome.runtime.sendMessage({
+        type: "API_CALL",
+        endpoint: "/api/save-key",
+        body: { apiKey: config.apiKey },
+      })
+    } catch {
+      // server might not be running yet — key sent per-request as fallback
+    }
     onComplete()
   }
 

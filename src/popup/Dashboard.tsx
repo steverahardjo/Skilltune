@@ -10,6 +10,7 @@ import {
   requestPostingAnalysis,
   resetSession,
 } from "../shared/scan"
+import { readWorkspaceFiles } from "../shared/filesystem"
 
 interface Props {
   onRescanSetup: () => void
@@ -39,13 +40,15 @@ export function Dashboard({ onRescanSetup }: Props) {
   }, [])
 
   const runProfile = async (cfg: UserConfig) => {
-    if (!cfg.workspaceFolder || !cfg.apiKey) return
+    if (!cfg.apiKey) return
     setProfiling(true)
     setError(null)
     setProfile(null)
     setResumeResult(null)
     try {
-      const result = await requestProfile(cfg.workspaceFolder, cfg.apiKey)
+      const files = await readWorkspaceFiles()
+      console.log("[dashboard] Read", files.length, "workspace files:", files.map(f => f.name).join(", "))
+      const result = await requestProfile(files, cfg.apiKey)
       setProfile(result)
     } catch (e) {
       setError(e instanceof Error ? e.message : "Profile failed")
@@ -91,12 +94,12 @@ export function Dashboard({ onRescanSetup }: Props) {
   }
 
   const handleWriteResume = async () => {
-    if (!config?.workspaceFolder || !config?.apiKey) return
+    if (!config?.apiKey) return
     setWriting(true)
     setError(null)
     setResumeResult(null)
     try {
-      const result = await requestResumeWrite(config.workspaceFolder, config.apiKey)
+      const result = await requestResumeWrite(config.apiKey)
       setResumeResult(result.result)
     } catch (e) {
       setError(e instanceof Error ? e.message : "Write resume failed")

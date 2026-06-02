@@ -37,7 +37,7 @@ export const resumeWriterAgent = new Agent({
 
     Return the PDF path and a summary of what you produced.
   `,
-  model: "openai/deepseek-v4",
+  model: "deepseek/deepseek-v4-flash",
   tools: { readDirectoryTool, writeTypstFileTool, compileTypstTool },
   memory,
 })

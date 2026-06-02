@@ -41,3 +41,4 @@ extension/options/
 
 # Mastra memory (local DB)
 .mastra/
+.env
