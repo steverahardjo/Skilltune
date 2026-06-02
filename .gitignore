@@ -30,5 +30,11 @@ report.[0-9]_.[0-9]_.[0-9]_.[0-9]_.json
 # IntelliJ based IDEs
 .idea
 
+# extension built output (manifest + icons are source, keep them)
+extension/popup/
+extension/background/
+extension/content/
+extension/options/
+
 # Finder (MacOS) folder config
 .DS_Store
