@@ -1,8 +1,8 @@
-export interface ResumeConfig {
-  resumePath: string
-  typstTemplate: string
-  llmApiKey: string
-  llmEndpoint: string
+export interface UserConfig {
+  name: string
+  targetRoles: string
+  industry: string
+  workspaceFolder: string
 }
 
 export interface JobScanResult {
@@ -21,3 +21,4 @@ export interface Recommendation {
 }
 
 export type WorkflowStep = "idle" | "scanning" | "analyzing" | "done" | "error"
+export type AppView = "onboarding" | "dashboard" | "loading"
