@@ -2,17 +2,16 @@ import "./theme.css"
 import { useState, useEffect } from "react"
 import type { UserConfig } from "../shared/types"
 import { loadConfig, saveConfig } from "../shared/storage"
-import { pickResumeFile } from "../shared/filesystem"
 
 interface Props {
+  resumeSession: boolean
   onComplete: () => void
 }
 
 const TOTAL_STEPS = 3
 
-export function Onboarding({ onComplete }: Props) {
+export function Onboarding({ resumeSession, onComplete }: Props) {
   const [step, setStep] = useState(1)
-  const [picking, setPicking] = useState(false)
   const [loaded, setLoaded] = useState(false)
   const [config, setConfig] = useState<UserConfig>({
     name: "",
@@ -26,14 +25,21 @@ export function Onboarding({ onComplete }: Props) {
     loadConfig().then((saved) => {
       if (saved) {
         setConfig(saved)
-        if (saved.apiKey) setStep(3)
-        else if (saved.resumeFile) setStep(3)
-        else if (saved.name) setStep(2)
-        else setStep(1)
+        if (resumeSession) {
+          setStep(1)
+        } else if (saved.apiKey) {
+          setStep(3)
+        } else if (saved.resumeFile) {
+          setStep(3)
+        } else if (saved.name) {
+          setStep(2)
+        } else {
+          setStep(1)
+        }
       }
       setLoaded(true)
     })
-  }, [])
+  }, [resumeSession])
 
   const update = (field: keyof UserConfig, value: string) =>
     setConfig((prev) => ({ ...prev, [field]: value }))
@@ -49,15 +55,6 @@ export function Onboarding({ onComplete }: Props) {
     if (s === 2) return config.resumeFile.trim().length > 0
     if (s === 3) return config.apiKey.trim().length > 0
     return false
-  }
-
-  const handlePickFile = async () => {
-    setPicking(true)
-    const file = await pickResumeFile()
-    setPicking(false)
-    if (file) {
-      await persist({ resumeFile: file })
-    }
   }
 
   const handleNext = async () => {
@@ -150,35 +147,26 @@ export function Onboarding({ onComplete }: Props) {
       {step === 2 && (
         <>
           <h2 className="form-heading">Resume file</h2>
-          <p className="form-sub">Pick your resume for profiling</p>
+          <p className="form-sub">Absolute path to your resume</p>
 
-          <button className="folder-picker" onClick={handlePickFile} disabled={picking}>
-            <svg className="folder-icon" viewBox="0 0 24 24" fill="currentColor">
-              <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
-              <polyline points="14,2 14,8 20,8" />
-            </svg>
-            <span>{picking ? "Opening..." : config.resumeFile || "Choose file"}</span>
-          </button>
-
-          {config.resumeFile && (
-            <div className="folder-confirm">
-              <div className="folder-path-row">
-                <svg className="folder-path-icon" viewBox="0 0 24 24" fill="currentColor">
-                  <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
-                  <polyline points="14,2 14,8 20,8" />
-                </svg>
-                <span className="folder-path-name">{config.resumeFile}</span>
-              </div>
-            </div>
-          )}
+          <div className="form-group">
+            <label className="form-label">File path</label>
+            <input
+              className="form-input"
+              value={config.resumeFile}
+              onChange={(e) => update("resumeFile", e.target.value)}
+              placeholder="/home/you/resume.typ"
+              autoFocus
+            />
+          </div>
 
           <div className="hint-card workspace-hint">
             <svg className="hint-icon" viewBox="0 0 24 24" fill="currentColor">
               <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-6h2v6zm0-8h-2V7h2v2z" />
             </svg>
             <p className="hint-text">
-              Supported formats: <strong>.pdf</strong>, <strong>.typ</strong>, <strong>.tex</strong>, <strong>.docx</strong>.
-              Best results with .typ or .tex files.
+              Enter the full path to your <strong>.typ</strong> or <strong>.tex</strong> resume file.
+              Best results with .typ files.
             </p>
           </div>
         </>

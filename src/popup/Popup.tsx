@@ -7,6 +7,7 @@ import { Dashboard } from "./Dashboard"
 
 export function Popup() {
   const [view, setView] = useState<AppView>("loading")
+  const [resumeSession, setResumeSession] = useState(false)
 
   const checkConfig = useCallback(async () => {
     const configured = await hasConfig()
@@ -26,8 +27,23 @@ export function Popup() {
   }
 
   if (view === "onboarding") {
-    return <Onboarding onComplete={() => setView("dashboard")} />
+    return (
+      <Onboarding
+        resumeSession={resumeSession}
+        onComplete={() => {
+          setResumeSession(false)
+          setView("dashboard")
+        }}
+      />
+    )
   }
 
-  return <Dashboard onRescanSetup={() => setView("onboarding")} />
+  return (
+    <Dashboard
+      onRescanSetup={() => {
+        setResumeSession(true)
+        setView("onboarding")
+      }}
+    />
+  )
 }

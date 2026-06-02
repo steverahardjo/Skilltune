@@ -103,11 +103,11 @@ const server = serve({
       async POST(req) {
         try {
           const body = await req.json()
-          const { file, analysis } = body as { file?: string; analysis?: string }
+          const { resumePath, analysis } = body as { resumePath?: string; analysis?: string }
           let { apiKey } = body as { apiKey?: string }
 
-          if (!file) {
-            return Response.json({ error: "Missing 'file'" }, { status: 400 })
+          if (!resumePath) {
+            return Response.json({ error: "Missing 'resumePath'" }, { status: 400 })
           }
           if (!analysis) {
             return Response.json({ error: "Missing 'analysis'" }, { status: 400 })
@@ -122,15 +122,26 @@ const server = serve({
 
           setDeepSeekEnv(apiKey)
 
-          const parsed: { name: string; content: string } = JSON.parse(file)
-          console.log(`[api/write] Resume: ${parsed.name} (${parsed.content.length} chars)`)
+          let resumeContent: string
+          const name = resumePath.split("/").pop() || resumePath
+          try {
+            const f = Bun.file(resumePath)
+            const text = await f.text()
+            resumeContent = text.slice(0, 3000).trim()
+            console.log(`[api/write] Read resume: ${name} (${resumeContent.length} chars)`)
+          } catch {
+            return Response.json(
+              { error: `Cannot read resume file: ${resumePath}` },
+              { status: 400 }
+            )
+          }
           console.log(`[api/write] Analysis: ${analysis.length} chars`)
 
           const prompt = `Write a tailored Typst resume.
 
 CURRENT RESUME:
---- ${parsed.name} ---
-${parsed.content}
+--- ${name} ---
+${resumeContent}
 --- End of resume ---
 
 JOB POSTING ANALYSIS:

@@ -9,7 +9,6 @@ import {
   requestPostingAnalysis,
   resetSession,
 } from "../shared/scan"
-import { readResumeFile } from "../shared/filesystem"
 
 interface Props {
   onRescanSetup: () => void
@@ -62,14 +61,13 @@ export function Dashboard({ onRescanSetup }: Props) {
   }
 
   const handleWriteResume = async () => {
-    if (!config?.apiKey || !analysis) return
+    if (!config?.apiKey || !analysis || !config?.resumeFile) return
     setWriting(true)
     setError(null)
     setTypSource(null)
     try {
-      const file = await readResumeFile()
-      console.log("[dashboard] Resume file:", file.name, file.content.length, "chars")
-      const result = await requestResumeWrite(file, analysis, config.apiKey)
+      console.log("[dashboard] Resume path:", config.resumeFile)
+      const result = await requestResumeWrite(config.resumeFile, analysis, config.apiKey)
       setTypSource(result.typ)
     } catch (e) {
       setError(e instanceof Error ? e.message : "Write resume failed")

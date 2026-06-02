@@ -1,6 +1,5 @@
 import { scanPage } from "../services/scanner"
 import { clearConfig } from "./storage"
-import { clearStoredFile } from "./filesystem"
 
 async function apiCall<T>(
   endpoint: string,
@@ -87,7 +86,6 @@ export async function extractPageText(): Promise<{
 }
 
 export async function resetSession(): Promise<void> {
-  await clearStoredFile()
   await clearConfig()
 }
 
@@ -103,13 +101,13 @@ export async function requestPostingAnalysis(
 }
 
 export async function requestResumeWrite(
-  file: { name: string; content: string },
+  resumePath: string,
   analysis: string,
   apiKey: string
 ): Promise<{ typ: string; steps: number }> {
   return apiCall(
     "/api/write-resume",
-    { file: JSON.stringify(file), analysis, apiKey },
+    { resumePath, analysis, apiKey },
     "Resume writer"
   )
 }
