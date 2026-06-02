@@ -1,4 +1,4 @@
-import { scanPage } from "../services/scanner"
+import { captureScreenshot, saveCapture } from "../services/scanner"
 import { clearConfig } from "./storage"
 import type { WriteResumeResponse } from "./types"
 
@@ -8,16 +8,9 @@ async function apiCall<T>(
   label: string
 ): Promise<T> {
   console.log(`[apiCall] ▶ ${label} ${endpoint}`)
-  console.log(
-    `[apiCall] body keys:`,
-    Object.keys(body)
-  )
-  console.log(
-    `[apiCall] body sizes:`,
-    Object.entries(body)
-      .map(([k, v]) => `${k}=${v.length}chars`)
-      .join(", ")
-  )
+  console.log(`[apiCall] body sizes:`, Object.entries(body)
+    .map(([k, v]) => `${k}=${v.length}chars`)
+    .join(", "))
 
   try {
     const response = await chrome.runtime.sendMessage({
@@ -26,22 +19,16 @@ async function apiCall<T>(
       body,
     })
 
-    console.log(
-      `[apiCall] ◀ ${label} ok=${response?.ok} status=${response?.status}`
-    )
-    if (response?.data?.error)
-      console.log(`[apiCall] ◀ error:`, response.data.error)
-
     if (!response) {
       throw new Error(
-        `Service worker did not respond\n→ ${label} (${endpoint})\n→ Possible: extension not reloaded after changes, or service worker is inactive\n→ Fix: go to chrome://extensions, click reload`
+        `Service worker did not respond\n→ ${label}\n→ Reload extension in chrome://extensions`
       )
     }
 
     if (!response.ok) {
       const detail = response.data?.error ?? JSON.stringify(response.data)
       throw new Error(
-        `Server returned HTTP ${response.status}\n→ ${label} (${endpoint})\n→ ${detail}`
+        `Server returned HTTP ${response.status}\n→ ${label}\n→ ${detail}`
       )
     }
 
@@ -49,30 +36,16 @@ async function apiCall<T>(
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e)
     console.error(`[apiCall] ✗ ${label} — ${msg}`)
-
-    if (
-      msg.includes("receiving end does not exist") ||
-      msg.includes("Could not establish connection")
-    ) {
-      throw new Error(
-        `Service worker not reachable\n→ ${label}\n→ Fix: reload extension in chrome://extensions`
-      )
-    }
-
     throw e
   }
 }
 
 export async function scanCurrentPage(): Promise<{ screenshot: string }> {
-  console.log("[scan] ▶ Starting screenshot capture")
-  try {
-    const result = await scanPage()
-    console.log("[scan] ◀ Screenshot captured successfully")
-    return result
-  } catch (e) {
-    console.error("[scan] ✗", e)
-    throw e
-  }
+  const screenshot = await captureScreenshot()
+  const now = new Date()
+  const date = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`
+  saveCapture(screenshot, `resume_adjuster/${date}_job_posting.png`).catch(() => {})
+  return { screenshot }
 }
 
 export async function extractPageText(): Promise<{
@@ -80,27 +53,30 @@ export async function extractPageText(): Promise<{
   url: string
   text: string
 }> {
-  console.log("[scan] ▶ Extracting page text via content script")
   const [tab] = await chrome.tabs.query({ active: true, currentWindow: true })
-  if (!tab?.id) throw new Error("[scan] ✗ No active tab")
-  console.log(`[scan] Active tab: id=${tab.id} url=${tab.url}`)
+  if (!tab?.id) throw new Error("No active tab")
 
   try {
-    const extracted = await chrome.tabs.sendMessage(tab.id, {
-      type: "SCAN_PAGE",
-    })
-    console.log(
-      `[scan] ◀ Extracted ${extracted.text.length} chars from page "${extracted.title}"`
-    )
+    const extracted = await chrome.tabs.sendMessage(tab.id, { type: "SCAN_PAGE" })
     return { title: extracted.title, url: extracted.url, text: extracted.text }
-  } catch (e) {
-    const msg = e instanceof Error ? e.message : String(e)
-    if (msg.includes("receiving end does not exist")) {
-      throw new Error(
-        `Content script not loaded on this page\n→ Navigate to the job posting page, then reopen the extension popup\n→ Or: reload the extension in chrome://extensions`
-      )
-    }
-    throw e
+  } catch {
+    // content script not loaded yet — inject on demand
+    const results = await chrome.scripting.executeScript({
+      target: { tabId: tab.id },
+      func: () => {
+        const title = document.title
+        const body = document.body.innerText
+        const cleaned = body
+          .replace(/\n{3,}/g, "\n\n")
+          .replace(/ {2,}/g, " ")
+          .slice(0, 12000)
+          .trim()
+        return { title, url: location.href, text: cleaned }
+      },
+    })
+    const data = results[0]?.result
+    if (!data || !data.text) throw new Error("No text found on this page")
+    return { title: data.title, url: data.url, text: data.text }
   }
 }
 
@@ -113,33 +89,30 @@ export async function requestCreateSkill(
   name: string,
   targetRoles: string,
   industry: string,
-  apiKey: string
 ): Promise<{ skillCreated: boolean }> {
   return apiCall(
     "/api/create-skill",
-    { resumePath, name, targetRoles, industry, apiKey },
+    { resumePath, name, targetRoles, industry },
     "Create skill"
   )
 }
 
 export async function requestPostingAnalysis(
   text: string,
-  apiKey: string
-): Promise<{ analysis: string; steps: number }> {
+): Promise<{ analysis: string }> {
   return apiCall(
     "/api/analyze-posting",
-    { text, apiKey },
+    { text },
     "Posting analysis"
   )
 }
 
 export async function requestResumeWrite(
   analysis: string,
-  apiKey: string
 ): Promise<WriteResumeResponse> {
   return apiCall(
     "/api/write-resume",
-    { analysis, apiKey },
+    { analysis },
     "Resume writer"
   )
 }

@@ -7,7 +7,6 @@ const DEFAULTS: UserConfig = {
   targetRoles: "",
   industry: "",
   resumeFile: "",
-  apiKey: "",
 }
 
 export async function loadConfig(): Promise<UserConfig | null> {
@@ -30,7 +29,6 @@ export async function hasConfig(): Promise<boolean> {
   return (
     config !== null &&
     (config.name?.length ?? 0) > 0 &&
-    (config.resumeFile?.length ?? 0) > 0 &&
-    (config.apiKey?.length ?? 0) > 0
+    (config.resumeFile?.length ?? 0) > 0
   )
 }

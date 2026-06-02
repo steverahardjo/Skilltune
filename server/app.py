@@ -13,10 +13,11 @@ from skills.skill_manager import get_skill_content, create_skill
 
 load_dotenv()
 
-KEY_DIR = Path(os.getcwd()) / ".mastra"
-KEY_FILE = KEY_DIR / "api_key"
+BASE_DIR = Path(__file__).resolve().parent.parent
+KEY_DIR = BASE_DIR / ".mastra"
 OUT_DIR = KEY_DIR / "output"
 SKILL_DIR = KEY_DIR / "skills"
+SCREENSHOTS_DIR = KEY_DIR / "screenshots"
 TYP_OUTPUT = OUT_DIR / "tailored_resume.typ"
 PDF_OUTPUT = OUT_DIR / "tailored_resume.pdf"
 
@@ -31,23 +32,10 @@ app.add_middleware(
 )
 
 
-def _load_key() -> str | None:
-    try:
-        key = KEY_FILE.read_text().strip()
-        return key or None
-    except FileNotFoundError:
-        return None
-
-
-def _save_key(key: str) -> None:
-    KEY_DIR.mkdir(parents=True, exist_ok=True)
-    KEY_FILE.write_text(key)
-
-
-def _get_api_key(body_key: str | None = None) -> str:
-    key = body_key or _load_key()
+def _get_api_key() -> str:
+    key = os.environ.get("DEEPSEEK_API_KEY")
     if not key:
-        raise HTTPException(400, "No API key. Run onboarding first.")
+        raise HTTPException(400, "DEEPSEEK_API_KEY not set in .env")
     return key
 
 
@@ -61,29 +49,16 @@ def _read_resume(path: str) -> str:
 # ── API Routes ──
 
 
-class KeyPayload(BaseModel):
-    apiKey: str
-
-
-@app.post("/api/save-key")
-def save_key(payload: KeyPayload):
-    if not payload.apiKey:
-        raise HTTPException(400, "Missing apiKey")
-    _save_key(payload.apiKey)
-    return {"saved": True}
-
-
 class CreateSkillPayload(BaseModel):
     resumePath: str
     name: str
     targetRoles: str = ""
     industry: str = ""
-    apiKey: str | None = None
 
 
 @app.post("/api/create-skill")
 def api_create_skill(payload: CreateSkillPayload):
-    api_key = _get_api_key(payload.apiKey)
+    api_key = _get_api_key()
     os.environ["DEEPSEEK_API_KEY"] = api_key
 
     resume = _read_resume(payload.resumePath)
@@ -101,30 +76,29 @@ def api_create_skill(payload: CreateSkillPayload):
 
 class AnalyzePayload(BaseModel):
     text: str
-    apiKey: str | None = None
 
 
 @app.post("/api/analyze-posting")
 def api_analyze_posting(payload: AnalyzePayload):
-    api_key = _get_api_key(payload.apiKey)
+    api_key = _get_api_key()
     os.environ["DEEPSEEK_API_KEY"] = api_key
 
-    print(f"[analyze] Text: {len(payload.text)} chars")
+    text = payload.text.replace("\n{2,}", "\n").strip()
+    print(f"[analyze] Text: {len(text)} chars")
 
     model = create_posting_agent()
-    analysis = analyze_posting(model, payload.text)
+    analysis = analyze_posting(model, text)
 
-    return {"analysis": analysis, "steps": 1}
+    return {"analysis": analysis}
 
 
 class WriteResumePayload(BaseModel):
     analysis: str
-    apiKey: str | None = None
 
 
 @app.post("/api/write-resume")
 def api_write_resume(payload: WriteResumePayload):
-    api_key = _get_api_key(payload.apiKey)
+    api_key = _get_api_key()
     os.environ["DEEPSEEK_API_KEY"] = api_key
 
     skill = get_skill_content()
@@ -171,7 +145,6 @@ Follow the workflow:
             "typ": typ_content or str(final),
             "typPath": str(TYP_OUTPUT),
             "pdfPath": str(PDF_OUTPUT) if pdf_exists else None,
-            "steps": 1,
             "message": str(final),
         }
     )
@@ -202,7 +175,5 @@ def api_download_pdf():
 if __name__ == "__main__":
     import uvicorn
 
-    print(f"[server] Starting on port 3721...")
-    saved = _load_key()
-    print(f"[server] {'Loaded saved API key' if saved else 'No saved API key — will receive from extension'}")
+    print("[server] Starting on port 3721...")
     uvicorn.run(app, host="0.0.0.0", port=3721, log_level="info")

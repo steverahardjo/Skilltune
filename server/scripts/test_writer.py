@@ -1,4 +1,5 @@
-"""Test the resume-writer pipeline end-to-end.
+"""Test the resume-writer pipeline end-to-end using a job posting text file
+(no screenshot — uses text-based analysis as fallback).
 
 Usage:
     python3 server/scripts/test_writer.py
@@ -102,12 +103,6 @@ def ms(n: float) -> str:
     return f"{n / 60000:.1f}m"
 
 
-def tok(n: int) -> str:
-    if n < 1000:
-        return str(n)
-    return f"{n / 1000:.1f}K"
-
-
 def main():
     api_key = os.environ.get("DEEPSEEK_API_KEY")
     if not api_key:
@@ -128,15 +123,14 @@ def main():
     print(f"Name: {name}  |  Target: {target_roles}  |  Industry: {industry}\n")
 
     T0 = time.time()
+    model = create_posting_agent()
 
     # ── Phase 1: Create SKILL ──
     print("── Phase 1: Create resume SKILL ──")
     t1 = time.time()
-    model = create_posting_agent()
     skill = create_skill(model, resume, name, target_roles, industry)
     skill_content = get_skill_content()
-    skill_len = len(skill_content) if skill_content else 0
-    print(f"  {ms((time.time() - t1) * 1000)}  |  {skill_len} chars")
+    print(f"  {ms((time.time() - t1) * 1000)}  |  {len(skill_content or '')} chars")
 
     # ── Phase 2: Analyze posting ──
     print("── Phase 2: Analyze job posting ──")
@@ -173,7 +167,6 @@ Follow the workflow:
     messages = result["messages"]
     final = str(messages[-1].content if messages else "")
 
-    # Show tool calls
     for msg in messages:
         if hasattr(msg, "tool_calls") and msg.tool_calls:
             for tc in msg.tool_calls:
@@ -188,7 +181,8 @@ Follow the workflow:
 
     # ── Phase 4: Output files ──
     print("── Phase 4: Output files ──")
-    out_dir = Path(os.getcwd()) / ".mastra" / "output"
+    screenshots_dir = Path(__file__).resolve().parent.parent.parent / ".mastra" / "screenshots"
+    out_dir = Path(__file__).resolve().parent.parent.parent / ".mastra" / "output"
     typ_file = out_dir / "tailored_resume.typ"
     pdf_file = out_dir / "tailored_resume.pdf"
 
@@ -197,7 +191,7 @@ Follow the workflow:
     pdf_bytes = pdf_file.stat().st_size if pdf_file.exists() else 0
 
     print(f"  tailored_resume.typ: {typ_bytes} bytes, {typ_lines} lines")
-    print(f"  tailored_resume.pdf: {'{} bytes'.format(pdf_bytes) if pdf_bytes else 'not compiled'}")
+    print(f"  tailored_resume.pdf: {{}}".format(f"{pdf_bytes} bytes" if pdf_bytes else "not compiled"))
 
     # ── Summary ──
     total_ms = (time.time() - T0) * 1000
@@ -207,6 +201,7 @@ Follow the workflow:
     print(f"  Total time:       {ms(total_ms)}")
     print(f"  .typ size:        {typ_bytes} bytes ({typ_lines} lines)")
     print(f"  .pdf:             {'compiled' if pdf_bytes else 'not compiled'}")
+    print(f"  Screenshots dir:  {screenshots_dir}")
     print(f"  Output dir:       {out_dir}")
 
 

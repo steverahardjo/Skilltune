@@ -32,7 +32,7 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
           ok: false,
           status: 0,
           data: {
-            error: `Cannot reach Mastra server at ${SERVER_URL}\n→ ${e.message}\n→ Is "bun run dev" running?`,
+            error: `Cannot reach server at ${SERVER_URL}\n→ ${e.message}\n→ Is "python3 server/app.py" running?`,
           },
         })
       })

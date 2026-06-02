@@ -6,65 +6,31 @@ interface ScanResponse {
   title: string
   url: string
   text: string
-  company: string | null
 }
 
-function extractJobContent(): ScanResponse {
-  const title = document.title.replace(/ [-|] .*$/, "").trim()
+const MAX_CHARS = 12000
 
-  let company: string | null = null
-  const metaCompany =
-    document.querySelector<HTMLMetaElement>('meta[name="company"]')?.content ??
-    document.querySelector<HTMLMetaElement>('meta[property="og:site_name"]')?.content
+function extractText(): ScanResponse {
+  const title = document.title.trim()
+  const body = document.body.innerText
 
-  if (metaCompany) company = metaCompany
-
-  const selectors = [
-    '[data-automation="job-description"]',
-    ".job-description",
-    ".description",
-    '[class*="job-description"]',
-    '[class*="posting"]',
-    "article",
-    "main",
-    '[role="main"]',
-  ]
-
-  let text = ""
-  for (const sel of selectors) {
-    const el = document.querySelector(sel)
-    if (el && el.textContent && el.textContent.trim().length > 200) {
-      text = el.textContent.trim()
-      break
-    }
-  }
-
-  if (!text) {
-    text = document.body.innerText
-  }
-
-  text = text
+  const cleaned = body
     .replace(/\n{3,}/g, "\n\n")
     .replace(/ {2,}/g, " ")
+    .slice(0, MAX_CHARS)
+    .trim()
 
-  const CROP = 20000
-  const words = text.split(/\s+/).filter(Boolean).length
-  const cropped = text.length > CROP
-  text = text.slice(0, CROP)
-  if (cropped) {
-    console.log(`[content] Cropped from ${text.length + (CROP - text.length) || "?"} to ${CROP} chars (~${words} words)`)
-  } else {
-    console.log(`[content] Extracted ${text.length} chars, ~${words} words`)
-  }
+  console.log(
+    `[content] Extracted ${cleaned.length} chars from "${title}"`
+  )
 
-  return { title, url: location.href, text, company }
+  return { title, url: location.href, text: cleaned }
 }
 
 chrome.runtime.onMessage.addListener(
   (message: ScanMessage, _sender, sendResponse) => {
     if (message.type === "SCAN_PAGE") {
-      const result = extractJobContent()
-      sendResponse(result)
+      sendResponse(extractText())
     }
     return true
   }

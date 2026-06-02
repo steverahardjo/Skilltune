@@ -1,9 +1,9 @@
 from langchain_deepseek import ChatDeepSeek
 from langchain_core.messages import SystemMessage, HumanMessage
 from pathlib import Path
-import os
 
-SKILL_DIR = Path(os.getcwd()) / ".mastra" / "skills"
+BASE_DIR = Path(__file__).resolve().parent.parent.parent
+SKILL_DIR = BASE_DIR / ".mastra" / "skills"
 SKILL_FILE = SKILL_DIR / "resume-skill.md"
 
 

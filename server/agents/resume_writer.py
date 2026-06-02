@@ -1,6 +1,7 @@
 from langchain_deepseek import ChatDeepSeek
 from langgraph.prebuilt import create_react_agent
-from tools import writer, typst_compile
+from langchain_community.tools import ShellTool
+from tools import writer
 
 SYSTEM_PROMPT = """You are a resume writer specializing in Typst formatting. You have access to:
 
@@ -13,14 +14,14 @@ SYSTEM_PROMPT = """You are a resume writer specializing in Typst formatting. You
 
 3. TOOLS:
    - writer: Write the final Typst source to a .typ file
-   - typst_compile: Compile the .typ file to PDF to verify it works
+   - terminal: Run shell commands (use "typst compile <file>.typ <file>.pdf" to compile)
 
 WORKFLOW:
 1. Read the RESUME SKILL to understand the person's background
 2. Read the JOB POSTING ANALYSIS to understand what the employer wants
 3. Write a tailored Typst resume that maps the person's background to the job
 4. Use the writer tool to save the .typ file
-5. Use the typst_compile tool to compile to PDF
+5. Use the terminal tool to run: typst compile <path>/tailored_resume.typ <path>/tailored_resume.pdf
 6. Report the file paths
 
 RULES:
@@ -39,8 +40,9 @@ RULES:
 
 def create_resume_agent(model_name: str = "deepseek-chat"):
     model = ChatDeepSeek(model=model_name)
+    shell = ShellTool()
     return create_react_agent(
         model=model,
-        tools=[writer, typst_compile],
-        state_modifier=SYSTEM_PROMPT,
+        tools=[writer, shell],
+        prompt=SYSTEM_PROMPT,
     )

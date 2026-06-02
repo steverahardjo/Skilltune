@@ -9,7 +9,7 @@ interface Props {
   onComplete: () => void
 }
 
-const TOTAL_STEPS = 3
+const TOTAL_STEPS = 2
 
 export function Onboarding({ resumeSession, onComplete }: Props) {
   const [step, setStep] = useState(1)
@@ -20,7 +20,6 @@ export function Onboarding({ resumeSession, onComplete }: Props) {
     targetRoles: "",
     industry: "",
     resumeFile: "",
-    apiKey: "",
   })
 
   useEffect(() => {
@@ -29,10 +28,8 @@ export function Onboarding({ resumeSession, onComplete }: Props) {
         setConfig(saved)
         if (resumeSession) {
           setStep(1)
-        } else if (saved.apiKey) {
-          setStep(3)
         } else if (saved.resumeFile) {
-          setStep(3)
+          setStep(2)
         } else if (saved.name) {
           setStep(2)
         } else {
@@ -55,7 +52,6 @@ export function Onboarding({ resumeSession, onComplete }: Props) {
   const canNext = (s: number): boolean => {
     if (s === 1) return config.name.trim().length > 0
     if (s === 2) return config.resumeFile.trim().length > 0
-    if (s === 3) return config.apiKey.trim().length > 0
     return false
   }
 
@@ -68,15 +64,6 @@ export function Onboarding({ resumeSession, onComplete }: Props) {
 
   const handleFinish = async () => {
     await persist()
-    try {
-      chrome.runtime.sendMessage({
-        type: "API_CALL",
-        endpoint: "/api/save-key",
-        body: { apiKey: config.apiKey },
-      })
-    } catch {
-      // server might not be running yet — key sent per-request as fallback
-    }
 
     setCreatingSkill(true)
     try {
@@ -85,7 +72,6 @@ export function Onboarding({ resumeSession, onComplete }: Props) {
         config.name,
         config.targetRoles,
         config.industry,
-        config.apiKey
       )
     } catch (e) {
       console.warn(
@@ -118,7 +104,7 @@ export function Onboarding({ resumeSession, onComplete }: Props) {
   return (
     <div className="google-popup">
       <div className="step-indicator">
-        {[1, 2, 3].map((s, i) => (
+        {[1, 2].map((s, i) => (
           <div key={s} style={{ display: "contents" }}>
             {i > 0 && (
               <div
@@ -204,45 +190,6 @@ export function Onboarding({ resumeSession, onComplete }: Props) {
             <p className="hint-text">
               Enter the full path to your <strong>.typ</strong> or{" "}
               <strong>.tex</strong> resume file. Best results with .typ files.
-            </p>
-          </div>
-        </>
-      )}
-
-      {step === 3 && (
-        <>
-          <h2 className="form-heading">API key</h2>
-          <p className="form-sub">
-            Connect your DeepSeek account to power the agent
-          </p>
-
-          <div className="form-group">
-            <label className="form-label">DeepSeek API key</label>
-            <input
-              className="form-input"
-              type="password"
-              value={config.apiKey}
-              onChange={(e) => update("apiKey", e.target.value)}
-              placeholder="sk-..."
-              autoFocus
-            />
-          </div>
-
-          <div className="hint-card api-hint">
-            <svg className="hint-icon" viewBox="0 0 24 24" fill="currentColor">
-              <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-6h2v6zm0-8h-2V7h2v2z" />
-            </svg>
-            <p className="hint-text">
-              Get your key at{" "}
-              <a
-                className="api-link"
-                href="https://platform.deepseek.com/api_keys"
-                target="_blank"
-                rel="noopener noreferrer"
-              >
-                platform.deepseek.com
-              </a>
-              . Your key is stored locally and sent only to DeepSeek's API.
             </p>
           </div>
         </>
