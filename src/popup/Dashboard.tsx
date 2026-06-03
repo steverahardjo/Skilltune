@@ -1,13 +1,15 @@
 import "./theme.css"
 import { useState, useEffect } from "react"
-import type { UserConfig, WriteResumeResponse } from "../shared/types"
+import type { UserConfig, WriteResumeResponse, JobScoreResponse } from "../shared/types"
 import { loadConfig } from "../shared/storage"
 import {
   scanCurrentPage,
   extractPageText,
   requestResumeWrite,
   requestPostingAnalysis,
+  requestJobScore,
   resetSession,
+  checkServerHealth,
 } from "../shared/scan"
 
 interface Props {
@@ -23,9 +25,13 @@ export function Dashboard({ onRescanSetup }: Props) {
   const [scanned, setScanned] = useState(false)
   const [analysis, setAnalysis] = useState<string | null>(null)
   const [result, setResult] = useState<WriteResumeResponse | null>(null)
+  const [serverUp, setServerUp] = useState(true)
+  const [scoring, setScoring] = useState(false)
+  const [jobScore, setJobScore] = useState<JobScoreResponse | null>(null)
 
   useEffect(() => {
     loadConfig().then(setConfig)
+    checkServerHealth().then(setServerUp)
   }, [])
 
   const handleScan = async () => {
@@ -85,15 +91,27 @@ export function Dashboard({ onRescanSetup }: Props) {
     }
   }
 
+  const handleScoreMatch = async () => {
+    if (!config?.resumeFile) return
+    if (!analysis) return
+    setScoring(true)
+    setError(null)
+    setJobScore(null)
+    try {
+      const res = await requestJobScore(config.resumeFile, analysis)
+      setJobScore(res)
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Score failed")
+    } finally {
+      setScoring(false)
+    }
+  }
+
   const handleDownloadTyp = () => {
-    if (!result?.typ) return
-    const blob = new Blob([result.typ], { type: "text/plain" })
-    const url = URL.createObjectURL(blob)
     const a = document.createElement("a")
-    a.href = url
+    a.href = "http://localhost:3721/api/download/typ"
     a.download = "tailored_resume.typ"
     a.click()
-    URL.revokeObjectURL(url)
   }
 
   const handleDownloadPdf = () => {
@@ -108,6 +126,7 @@ export function Dashboard({ onRescanSetup }: Props) {
     setScanned(false)
     setAnalysis(null)
     setResult(null)
+    setJobScore(null)
     setConfig(null)
     await resetSession()
     onRescanSetup()
@@ -123,6 +142,15 @@ export function Dashboard({ onRescanSetup }: Props) {
           {config.name.charAt(0).toUpperCase()}
         </button>
       </div>
+
+      {!serverUp && (
+        <div className="scan-error">
+          <svg className="scan-error-icon" viewBox="0 0 24 24" fill="currentColor">
+            <path d="M1 21h22L12 2 1 21zm12-3h-2v-2h2v2zm0-4h-2v-4h2v4z" />
+          </svg>
+          <span>Backend not running.<br/>Run <code style={{background:"rgba(0,0,0,0.08)",padding:"1px 4px",borderRadius:3}}>cd server && python3 app.py</code></span>
+        </div>
+      )}
 
       <button className="scan-btn" onClick={handleScan} disabled={scanning}>
         {scanning ? (
@@ -205,13 +233,80 @@ export function Dashboard({ onRescanSetup }: Props) {
         </div>
       )}
 
+      {jobScore && (
+        <div className="profile-result" style={{ borderColor: "#9333ea", background: "#faf5ff" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 8 }}>
+            <div style={{
+              width: 48, height: 48, borderRadius: "50%", background: "#9333ea",
+              display: "flex", alignItems: "center", justifyContent: "center",
+              color: "#fff", fontWeight: 700, fontSize: 18
+            }}>
+              {jobScore.score}/10
+            </div>
+            <div>
+              <div style={{ fontWeight: 600, fontSize: 14, color: "#333" }}>Match Score</div>
+              <div style={{ fontSize: 12, color: "#666" }}>
+                {jobScore.similarityPct}% TF-IDF similarity
+              </div>
+            </div>
+          </div>
+
+          <div style={{ marginTop: 8 }}>
+            <div style={{ fontWeight: 600, fontSize: 12, color: "#0d904f", marginBottom: 4 }}>Strengths</div>
+            {jobScore.strengths.slice(0, 4).map((s, i) => (
+              <div key={i} style={{ fontSize: 12, color: "#333", paddingLeft: 8 }}>• {s}</div>
+            ))}
+          </div>
+
+          {jobScore.gaps.length > 0 && (
+            <div style={{ marginTop: 8 }}>
+              <div style={{ fontWeight: 600, fontSize: 12, color: "#c62828", marginBottom: 4 }}>Gaps</div>
+              {jobScore.gaps.slice(0, 4).map((g, i) => (
+                <div key={i} style={{ fontSize: 12, color: "#333", paddingLeft: 8 }}>• {g}</div>
+              ))}
+            </div>
+          )}
+
+          <div style={{ marginTop: 8 }}>
+            <div style={{ fontWeight: 600, fontSize: 12, color: "#1a73e8", marginBottom: 4 }}>Suggestions</div>
+            {jobScore.suggestions.slice(0, 3).map((s, i) => (
+              <div key={i} style={{ fontSize: 12, color: "#333", paddingLeft: 8 }}>• {s}</div>
+            ))}
+          </div>
+
+          <div style={{ marginTop: 8, fontSize: 12, color: "#666", fontStyle: "italic" }}>
+            {jobScore.summary}
+          </div>
+
+          <div style={{ marginTop: 8, display: "flex", gap: 6, flexWrap: "wrap" }}>
+            {jobScore.keyMatches.slice(0, 12).map((s) => (
+              <span key={s} style={{
+                padding: "1px 6px", borderRadius: 4, fontSize: 11,
+                background: "#d4edda", color: "#155724"
+              }}>{s}</span>
+            ))}
+            {jobScore.keyMissing.slice(0, 6).map((s) => (
+              <span key={s} style={{
+                padding: "1px 6px", borderRadius: 4, fontSize: 11,
+                background: "#f8d7da", color: "#721c24"
+              }}>{s}</span>
+            ))}
+          </div>
+        </div>
+      )}
+
       {result && (
         <div className="profile-result" style={{ borderColor: "#0d904f" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8 }}>
+            <svg viewBox="0 0 24 24" fill="#0d904f" style={{ width: 22, height: 22, flexShrink: 0 }}>
+              <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z" />
+            </svg>
+            <span style={{ fontWeight: 600, fontSize: 14, color: "#0d904f" }}>Resume written</span>
+          </div>
           {result.message && (
-            <div style={{ marginBottom: 8, fontSize: 13, color: "#666" }}>{result.message}</div>
+            <div style={{ fontSize: 12, color: "#666", marginBottom: 8 }}>{result.message}</div>
           )}
-          {result.typ && <pre className="profile-text">{result.typ}</pre>}
-          <div style={{ display: "flex", gap: 8, marginTop: 8, flexWrap: "wrap" }}>
+          <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
             <button className="download-btn" onClick={handleDownloadTyp}>
               <svg className="download-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                 <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
@@ -233,6 +328,27 @@ export function Dashboard({ onRescanSetup }: Props) {
           </div>
         </div>
       )}
+
+      <button
+        className="profile-btn"
+        onClick={handleScoreMatch}
+        disabled={scoring || !analysis || !config?.resumeFile}
+        style={{ background: "#f3e8ff", borderColor: "#9333ea", color: "#9333ea" }}
+      >
+        {scoring ? (
+          <>
+            <div className="spinner" style={{ width: 18, height: 18, borderWidth: 2, borderTopColor: "#9333ea" }} />
+            Scoring match...
+          </>
+        ) : (
+          <>
+            <svg className="profile-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <polyline points="22,12 18,12 15,21 9,3 6,12 2,12" />
+            </svg>
+            Score match
+          </>
+        )}
+      </button>
 
       <div className="info-card">
         <div className="info-row">

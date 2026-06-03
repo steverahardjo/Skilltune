@@ -3,6 +3,7 @@ from langgraph.prebuilt import create_react_agent
 from langchain_community.tools import ShellTool
 from tools import writer
 
+
 SYSTEM_PROMPT = """You are a resume writer specializing in Typst formatting. You have access to:
 
 1. A RESUME TYPST SOURCE — the user's current resume in Typst format.
@@ -22,7 +23,7 @@ WORKFLOW:
 2. Study the JOB POSTING ANALYSIS — understand what the employer wants
 3. Write a tailored Typst resume using the SAME visual style as the reference (fonts, spacing, layout)
    but with content tweaked to emphasize skills/experience matching the job
-4. Use the writer tool to save the .typ file into a name with structure of <company_name>_<position>_steverahardjo_<current_date>.typ
+4. Use the writer tool to save the .typ file with the filename provided in the task
 5. Use the terminal tool to compile: typst compile <path>/<file>.typ <path>/<file>.pdf
 6. Report the file paths
 

@@ -1,5 +1,6 @@
 import os
 from pathlib import Path
+from datetime import date
 
 from dotenv import load_dotenv
 from fastapi import FastAPI, HTTPException
@@ -9,6 +10,8 @@ from pydantic import BaseModel
 
 from agents.posting_analysis import create_posting_agent, analyze_posting
 from agents.resume_writer import create_resume_agent
+from agents.job_scorer import score_job
+from agents.csv_writer import create_csv_agent
 
 load_dotenv()
 
@@ -36,6 +39,11 @@ def _get_api_key() -> str:
 # ── API Routes ──
 
 
+@app.api_route("/api/health", methods=["GET", "POST"])
+def health():
+    return {"ok": True}
+
+
 class AnalyzePayload(BaseModel):
     text: str
 
@@ -52,6 +60,29 @@ def api_analyze_posting(payload: AnalyzePayload):
     analysis = analyze_posting(model, text)
 
     return {"analysis": analysis}
+
+
+class JobScorePayload(BaseModel):
+    resumePath: str
+    analysis: str
+
+
+@app.post("/api/job-score")
+def api_job_score(payload: JobScorePayload):
+    api_key = _get_api_key()
+    os.environ["DEEPSEEK_API_KEY"] = api_key
+    result = score_job(payload.resumePath, payload.analysis)
+
+    return {
+        "score": result.score,
+        "similarityPct": result.similarity_pct,
+        "keyMatches": result.key_matches,
+        "keyMissing": result.key_missing,
+        "strengths": result.strengths,
+        "gaps": result.gaps,
+        "suggestions": result.suggestions,
+        "summary": result.summary,
+    }
 
 
 class WriteResumePayload(BaseModel):
@@ -74,6 +105,7 @@ def api_write_resume(payload: WriteResumePayload):
     agent = create_resume_agent()
     from langchain_core.messages import HumanMessage
 
+    today = date.today().isoformat()
     result = agent.invoke({"messages": [HumanMessage(content=f"""Write a tailored Typst resume using the reference resume and job analysis below.
 
 RESUME TYPST SOURCE (use this for style, formatting, and the user's actual background):
@@ -88,7 +120,7 @@ Follow the workflow:
 1. Study the RESUME TYPST SOURCE — understand the person's background, and replicate the Typst style (fonts, spacing, layout, heading styles)
 2. Study the JOB POSTING ANALYSIS — understand what the employer wants
 3. Write a tailored Typst resume using the same visual style, with content tweaked for the job
-4. Use the writer tool to save the .typ file
+4. Use the writer tool to save the .typ file with the filename: <company>_<role>_{today}.typ
 5. Use the terminal tool to compile: typst compile <path>/<file>.typ <path>/<file>.pdf
 6. Report the file paths""")]})
 
@@ -96,11 +128,9 @@ Follow the workflow:
     final = messages[-1].content if messages else ""
 
     # read the output .typ file (most recently written)
-    typ_content = None
     typ_path = None
     if TEMP_DIR.exists():
         for f in sorted(TEMP_DIR.glob("*.typ"), key=lambda p: p.stat().st_mtime, reverse=True):
-            typ_content = f.read_text()
             typ_path = str(f)
             break
 
@@ -110,8 +140,24 @@ Follow the workflow:
         if Path(candidate).exists():
             pdf_path = candidate
 
+    # ── Log to CSV ──
+    try:
+        csv_agent = create_csv_agent()
+        csv_agent.invoke({"messages": [HumanMessage(content=f"""Log this job application to CSV.
+
+JOB POSTING ANALYSIS (extract company and role from this):
+{payload.analysis[:2000]}
+
+DATE: {today}
+TYP PATH: {typ_path or 'none'}
+PDF PATH: {pdf_path or 'none'}
+NOTES: Resume tailored and compiled successfully""")]})
+        print(f"[write] Application logged to temp/applications.csv")
+    except Exception as e:
+        print(f"[write] CSV logging failed (non-fatal): {e}")
+
     return JSONResponse({
-        "typ": typ_content or str(final),
+        "success": True,
         "typPath": typ_path or "",
         "pdfPath": pdf_path,
         "message": str(final),

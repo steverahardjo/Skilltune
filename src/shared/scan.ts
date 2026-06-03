@@ -1,6 +1,6 @@
 import { captureScreenshot, saveCapture } from "../services/scanner"
 import { clearConfig } from "./storage"
-import type { WriteResumeResponse } from "./types"
+import type { WriteResumeResponse, JobScoreResponse } from "./types"
 
 async function apiCall<T>(
   endpoint: string,
@@ -30,6 +30,19 @@ async function apiCall<T>(
     const msg = e instanceof Error ? e.message : String(e)
     console.error(`[apiCall] ✗ ${label} — ${msg}`)
     throw e
+  }
+}
+
+export async function checkServerHealth(): Promise<boolean> {
+  try {
+    const response = await chrome.runtime.sendMessage({
+      type: "API_CALL",
+      endpoint: "/api/health",
+      body: {},
+    })
+    return response?.ok && response?.data?.ok === true
+  } catch {
+    return false
   }
 }
 
@@ -87,4 +100,11 @@ export async function requestResumeWrite(
   analysis: string,
 ): Promise<WriteResumeResponse> {
   return apiCall("/api/write-resume", { resumePath, analysis }, "Resume writer")
+}
+
+export async function requestJobScore(
+  resumePath: string,
+  analysis: string,
+): Promise<JobScoreResponse> {
+  return apiCall("/api/job-score", { resumePath, analysis }, "Job score")
 }

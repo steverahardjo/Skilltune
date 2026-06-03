@@ -6,10 +6,21 @@ export interface UserConfig {
 }
 
 export interface WriteResumeResponse {
-  typ: string | null
+  success: boolean
   typPath: string
   pdfPath: string | null
   message: string
+}
+
+export interface JobScoreResponse {
+  score: number
+  similarityPct: number
+  keyMatches: string[]
+  keyMissing: string[]
+  strengths: string[]
+  gaps: string[]
+  suggestions: string[]
+  summary: string
 }
 
 export type AppView = "onboarding" | "dashboard" | "loading"
