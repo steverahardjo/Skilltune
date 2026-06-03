@@ -20,7 +20,7 @@ export function Popup() {
 
   if (view === "loading") {
     return (
-      <div className="google-popup" style={{ display: "flex", alignItems: "center", justifyContent: "center", minHeight: 200 }}>
+      <div className="g-pup" style={{ display: "flex", alignItems: "center", justifyContent: "center", minHeight: 200 }}>
         <div className="spinner" />
       </div>
     )

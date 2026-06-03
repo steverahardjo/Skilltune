@@ -1,6 +1,6 @@
-# Resume Adjuster
+# Skilltune
 
-Chrome extension that analyzes job postings and writes tailored Typst resumes — powered by LangChain/DeepSeek agents.
+An agentic resume adjuster Chrome extension — powered by LangChain + DeepSeek.
 
 ## How it works
 

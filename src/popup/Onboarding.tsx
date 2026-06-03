@@ -67,14 +67,14 @@ export function Onboarding({ resumeSession, onComplete }: Props) {
 
   if (!loaded) {
     return (
-      <div className="google-popup" style={{ display: "flex", alignItems: "center", justifyContent: "center", minHeight: 200 }}>
+      <div className="g-pup" style={{ display: "flex", alignItems: "center", justifyContent: "center", minHeight: 200 }}>
         <div className="spinner" />
       </div>
     )
   }
 
   return (
-    <div className="google-popup">
+    <div className="g-pup">
       <div className="step-indicator">
         {[1, 2].map((s, i) => (
           <div key={s} style={{ display: "contents" }}>

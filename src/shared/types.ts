@@ -7,7 +7,7 @@ export interface UserConfig {
 
 export interface WriteResumeResponse {
   success: boolean
-  typPath: string
+  sourcePath: string
   pdfPath: string | null
   message: string
 }

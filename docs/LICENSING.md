@@ -5,8 +5,8 @@
 This project is licensed under the **GNU Affero General Public License v3.0 (AGPL-3.0)**.
 
 ```
-Resume Adjuster — Chrome extension for tailoring resumes to job postings
-Copyright (C) 2026  <Author Name>
+Skilltune — Agentic resume adjuster Chrome extension
+Copyright (C) 2026  Steve Rahardjo
 
 This program is free software: you can redistribute it and/or modify
 it under the terms of the GNU Affero General Public License as published

@@ -18,7 +18,7 @@ load_dotenv()
 BASE_DIR = Path(__file__).resolve().parent.parent
 TEMP_DIR = BASE_DIR / "temp"
 
-app = FastAPI(title="Resume Adjuster")
+app = FastAPI(title="Skilltune")
 
 app.add_middleware(
     CORSMiddleware,
@@ -102,14 +102,23 @@ def api_write_resume(payload: WriteResumePayload):
 
     print(f"[write] Resume: {len(resume_content)} chars, Analysis: {len(payload.analysis)} chars")
 
+    ext = Path(payload.resumePath).suffix.lower()
+    fmt = "Typst" if ext == ".typ" else "LaTeX"
+    compile_cmd = (
+        f"typst compile <path>/<file>.typ <path>/<file>.pdf"
+        if ext == ".typ"
+        else f"pdflatex -interaction=nonstopmode -output-directory=<dir> <file>"
+    )
+    out_glob = "*.typ" if ext == ".typ" else "*.tex"
+
     agent = create_resume_agent()
     from langchain_core.messages import HumanMessage
 
     today = date.today().isoformat()
-    result = agent.invoke({"messages": [HumanMessage(content=f"""Write a tailored Typst resume using the reference resume and job analysis below.
+    result = agent.invoke({"messages": [HumanMessage(content=f"""Write a tailored {fmt} resume using the reference resume and job analysis below.
 
-RESUME TYPST SOURCE (use this for style, formatting, and the user's actual background):
---- resume.typ ---
+RESUME SOURCE (use this for style, formatting, and the user's actual background):
+--- resume{ext} ---
 {resume_content[:6000]}
 --- end resume ---
 
@@ -117,60 +126,60 @@ JOB POSTING ANALYSIS:
 {payload.analysis}
 
 Follow the workflow:
-1. Study the RESUME TYPST SOURCE — understand the person's background, and replicate the Typst style (fonts, spacing, layout, heading styles)
+1. Study the RESUME SOURCE — understand the person's background, and replicate the {fmt} style (fonts, spacing, layout, heading styles, document class, packages)
 2. Study the JOB POSTING ANALYSIS — understand what the employer wants
-3. Write a tailored Typst resume using the same visual style, with content tweaked for the job
-4. Use the writer tool to save the .typ file with the filename: <company>_<role>_{today}.typ
-5. Use the terminal tool to compile: typst compile <path>/<file>.typ <path>/<file>.pdf
+3. Write a tailored {fmt} resume using the same visual style, with content tweaked for the job
+4. Use the writer tool to save the file with the filename: <company>_<role>_{today}{ext}
+5. Use the terminal tool to compile: {compile_cmd}
 6. Report the file paths""")]})
 
     messages = result["messages"]
     final = messages[-1].content if messages else ""
 
-    # read the output .typ file (most recently written)
-    typ_path = None
+    source_path = None
+    pdf_ext = ".pdf"
     if TEMP_DIR.exists():
-        for f in sorted(TEMP_DIR.glob("*.typ"), key=lambda p: p.stat().st_mtime, reverse=True):
-            typ_path = str(f)
+        for f in sorted(TEMP_DIR.glob(out_glob), key=lambda p: p.stat().st_mtime, reverse=True):
+            source_path = str(f)
             break
 
     pdf_path = None
-    if typ_path:
-        candidate = typ_path.replace(".typ", ".pdf")
-        if Path(candidate).exists():
-            pdf_path = candidate
+    if source_path:
+        for ext in [".typ", ".tex"]:
+            candidate = source_path.replace(ext, pdf_ext)
+            if Path(candidate).exists():
+                pdf_path = candidate
+                break
 
     # ── Log to CSV ──
     try:
         csv_agent = create_csv_agent()
-        csv_agent.invoke({"messages": [HumanMessage(content=f"""Log this job application to CSV.
+        csv_agent.invoke({"messages": [HumanMessage(content=f"""Log this job application.
 
-JOB POSTING ANALYSIS (extract company and role from this):
+JOB SUMMARY:
 {payload.analysis[:2000]}
 
-DATE: {today}
-TYP PATH: {typ_path or 'none'}
-PDF PATH: {pdf_path or 'none'}
-NOTES: Resume tailored and compiled successfully""")]})
+DATE: {today}""")]})
         print(f"[write] Application logged to temp/applications.csv")
     except Exception as e:
         print(f"[write] CSV logging failed (non-fatal): {e}")
 
     return JSONResponse({
         "success": True,
-        "typPath": typ_path or "",
+        "sourcePath": source_path or "",
         "pdfPath": pdf_path,
         "message": str(final),
     })
 
 
-@app.get("/api/download/typ")
-def api_download_typ():
-    files = sorted(TEMP_DIR.glob("*.typ"), key=lambda p: p.stat().st_mtime, reverse=True)
-    if not files:
-        raise HTTPException(404, "Not found")
-    path = str(files[0])
-    return FileResponse(path, media_type="text/plain", filename=files[0].name)
+@app.get("/api/download/source")
+def api_download_source():
+    for pat in ["*.typ", "*.tex"]:
+        files = sorted(TEMP_DIR.glob(pat), key=lambda p: p.stat().st_mtime, reverse=True)
+        if files:
+            path = str(files[0])
+            return FileResponse(path, media_type="text/plain", filename=files[0].name)
+    raise HTTPException(404, "Not found")
 
 
 @app.get("/api/download/pdf")

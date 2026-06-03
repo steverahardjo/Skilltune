@@ -3,7 +3,7 @@ declare var DEV_MODE: boolean
 const SERVER_URL = "http://localhost:3721"
 
 chrome.runtime.onInstalled.addListener(() => {
-  console.log("Resume Adjuster installed")
+  console.log("Skilltune installed")
 })
 
 chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {

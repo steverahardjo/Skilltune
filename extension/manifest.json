@@ -1,13 +1,13 @@
 {
   "manifest_version": 3,
-  "name": "Resume Adjuster",
+  "name": "Skilltune",
   "version": "0.1.0",
-  "description": "Scan job postings and tailor your resume to match",
+  "description": "Agentic resume adjuster — analyze job postings and tailor your resume",
   "permissions": ["activeTab", "storage", "scripting", "downloads"],
   "host_permissions": ["<all_urls>"],
   "action": {
     "default_popup": "popup/index.html",
-    "default_title": "Resume Adjuster"
+    "default_title": "Skilltune"
   },
   "icons": {
     "16": "icons/icon16.png",

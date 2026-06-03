@@ -3,7 +3,6 @@ import { useState, useEffect } from "react"
 import type { UserConfig, WriteResumeResponse, JobScoreResponse } from "../shared/types"
 import { loadConfig } from "../shared/storage"
 import {
-  scanCurrentPage,
   extractPageText,
   requestResumeWrite,
   requestPostingAnalysis,
@@ -18,11 +17,9 @@ interface Props {
 
 export function Dashboard({ onRescanSetup }: Props) {
   const [config, setConfig] = useState<UserConfig | null>(null)
-  const [scanning, setScanning] = useState(false)
   const [analyzing, setAnalyzing] = useState(false)
   const [writing, setWriting] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const [scanned, setScanned] = useState(false)
   const [analysis, setAnalysis] = useState<string | null>(null)
   const [result, setResult] = useState<WriteResumeResponse | null>(null)
   const [serverUp, setServerUp] = useState(true)
@@ -33,22 +30,6 @@ export function Dashboard({ onRescanSetup }: Props) {
     loadConfig().then(setConfig)
     checkServerHealth().then(setServerUp)
   }, [])
-
-  const handleScan = async () => {
-    setScanning(true)
-    setError(null)
-    setScanned(false)
-    setAnalysis(null)
-    setResult(null)
-    try {
-      await scanCurrentPage()
-      setScanned(true)
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "Scan failed")
-    } finally {
-      setScanning(false)
-    }
-  }
 
   const handleAnalyze = async () => {
     setAnalyzing(true)
@@ -107,13 +88,6 @@ export function Dashboard({ onRescanSetup }: Props) {
     }
   }
 
-  const handleDownloadTyp = () => {
-    const a = document.createElement("a")
-    a.href = "http://localhost:3721/api/download/typ"
-    a.download = "tailored_resume.typ"
-    a.click()
-  }
-
   const handleDownloadPdf = () => {
     const a = document.createElement("a")
     a.href = "http://localhost:3721/api/download/pdf"
@@ -123,7 +97,6 @@ export function Dashboard({ onRescanSetup }: Props) {
 
   const handleReset = async () => {
     setError(null)
-    setScanned(false)
     setAnalysis(null)
     setResult(null)
     setJobScore(null)
@@ -135,9 +108,9 @@ export function Dashboard({ onRescanSetup }: Props) {
   if (!config) return null
 
   return (
-    <div className="google-popup">
+    <div className="g-pup">
       <div className="dash-header">
-        <h1 className="dash-title">Resume Adjuster</h1>
+        <h1 className="dash-title">Skilltune <span className="logo-dot" /></h1>
         <button className="dash-avatar" onClick={onRescanSetup} title="Edit setup">
           {config.name.charAt(0).toUpperCase()}
         </button>
@@ -151,23 +124,6 @@ export function Dashboard({ onRescanSetup }: Props) {
           <span>Backend not running.<br/>Run <code style={{background:"rgba(0,0,0,0.08)",padding:"1px 4px",borderRadius:3}}>cd server && python3 app.py</code></span>
         </div>
       )}
-
-      <button className="scan-btn" onClick={handleScan} disabled={scanning}>
-        {scanning ? (
-          <>
-            <div className="spinner" style={{ width: 18, height: 18, borderWidth: 2 }} />
-            Capturing page...
-          </>
-        ) : (
-          <>
-            <svg className="scan-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-              <path d="M21 12a9 9 0 1 1-6.219-8.56" />
-              <polyline points="21,3 21,9 15,9" />
-            </svg>
-            Scan this page
-          </>
-        )}
-      </button>
 
       <button className="profile-btn" onClick={handleAnalyze} disabled={analyzing}>
         {analyzing ? (
@@ -215,15 +171,6 @@ export function Dashboard({ onRescanSetup }: Props) {
             <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-2h2v2zm0-4h-2V7h2v6z" />
           </svg>
           <span>{error}</span>
-        </div>
-      )}
-
-      {scanned && (
-        <div className="scan-confirm">
-          <svg className="scan-confirm-icon" viewBox="0 0 24 24" fill="currentColor">
-            <path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z" />
-          </svg>
-          <span className="scan-confirm-text">Screenshot saved</span>
         </div>
       )}
 
@@ -307,16 +254,8 @@ export function Dashboard({ onRescanSetup }: Props) {
             <div style={{ fontSize: 12, color: "#666", marginBottom: 8 }}>{result.message}</div>
           )}
           <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-            <button className="download-btn" onClick={handleDownloadTyp}>
-              <svg className="download-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
-                <polyline points="7,10 12,15 17,10" />
-                <line x1="12" y1="15" x2="12" y2="3" />
-              </svg>
-              Download .typ
-            </button>
             {result.pdfPath && (
-              <button className="download-btn" onClick={handleDownloadPdf} style={{ background: "#1a73e8", borderColor: "#1a73e8" }}>
+              <button className="download-btn" onClick={handleDownloadPdf} style={{ background: "#111", borderColor: "#111", color: "#fff" }}>
                 <svg className="download-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                   <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
                   <polyline points="7,10 12,15 17,10" />
@@ -324,6 +263,9 @@ export function Dashboard({ onRescanSetup }: Props) {
                 </svg>
                 Download PDF
               </button>
+            )}
+            {!result.pdfPath && (
+              <span style={{ fontSize: 11, color: "#888", fontStyle: "italic" }}>PDF will appear after compilation</span>
             )}
           </div>
         </div>
@@ -367,7 +309,7 @@ export function Dashboard({ onRescanSetup }: Props) {
         </div>
       </div>
 
-      <p className="dash-hint">Scan → Analyze posting → Write resume</p>
+      <p className="dash-hint">Analyze posting → Score match → Write resume</p>
 
       <button className="reset-link" onClick={handleReset}>
         Reset setup
