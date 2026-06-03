@@ -1,113 +1,134 @@
 # Resume Adjuster
 
-Chrome extension that analyzes job postings and writes tailored resumes — powered by [Mastra](https://mastra.ai) agents and DeepSeek.
+Chrome extension that analyzes job postings and writes tailored Typst resumes — powered by LangChain/DeepSeek agents.
 
 ## How it works
 
-1. **Onboarding** — Enter your name, target roles, industry, pick your resume file (`.typ`, `.tex`, `.pdf`, `.docx`), and provide a DeepSeek API key.
-2. **Scan** — Browse any job posting page, open the extension popup, and click "Scan page" to capture a screenshot.
-3. **Analyze** — Click "Analyze posting" to have an AI agent extract job title, company, skills, requirements, and responsibilities from the scanned text.
-4. **Write** — Click "Write tailored resume" to have an AI agent generate a tailored Typst resume source file, which you can download as `.typ` and compile with [Typst](https://typst.app).
+1. **Onboarding** — Enter your name, target roles, industry, and path to your resume file (`.typ`).
+2. **Scan** — Browse a job posting page, open the extension popup, click "Scan this page" to capture a screenshot.
+3. **Analyze** — Click "Analyze posting" to extract the page text and have an AI agent extract job title, company, skills, requirements, and responsibilities.
+4. **Write** — Click "Write tailored resume" to generate a tailored `.typ` file using your resume as a style reference, compiled to PDF via Typst CLI.
 
 ## Architecture
 
 ```
-┌─────────────────────┐   chrome.runtime      ┌──────────────────────┐
-│   Chrome Extension   │  sendMessage(API_CALL)  │   Local Mastra API   │
-│                     │ ───────────────────────→ │   (localhost:3721)   │
-│  Popup (React)      │ ←─────────────────────── │                      │
-│  Service Worker     │      JSON response       │  Agents:             │
-│  Content Script     │                          │  - posting-analysis  │
-│                     │                          │  - resume-writer     │
-└─────────────────────┘                          └──────────────────────┘
+┌─────────────────────┐  chrome.runtime      ┌───────────────────────┐
+│   Chrome Extension   │ sendMessage(API_CALL)  │   Python Server        │
+│                     │ ──────────────────────→ │   (localhost:3721)     │
+│  Popup (React)      │ ←────────────────────── │                        │
+│  Service Worker     │     JSON response       │  LangChain Agents:     │
+│  Content Script     │                         │  - posting-analysis   │
+│                     │                         │  - resume-writer      │
+└─────────────────────┘                         └───────────────────────┘
 ```
 
-- **Stateless** — every API call is independent. The extension holds the analysis result in React state and passes it to the write endpoint. No shared database state between agents.
-- **Popup never calls `fetch()` directly** — all API calls go through the service worker as a network proxy (MV3 requirement).
-- **Single resume file** — pick a `.typ`/`.tex`/`.pdf`/`.docx` file during onboarding, stored via File System Access API to IndexedDB.
+- **Stateless** — every API call is independent. The extension holds the analysis result in React state.
+- **Popup never calls `fetch()` directly** — all API calls go through the service worker (MV3 requirement).
+- **Single resume file** — enter the path to your `.typ` resume during onboarding, stored in `chrome.storage.local`.
+- **API key via `.env`** — the server reads `DEEPSEEK_API_KEY` from `server/.env`, no key flow in the extension.
 
 ## Project structure
 
 ```
-src/
-├── index.ts                     # Mastra server (Bun, port 3721)
-├── popup/
-│   ├── index.tsx                # Popup entry point
-│   ├── Popup.tsx                # Root component (onboarding vs dashboard)
-│   ├── Onboarding.tsx           # 3-step onboarding flow
-│   ├── Dashboard.tsx            # Main UI (Scan/Analyze/Write)
-│   └── theme.css                # Styling
+src/                         # Chrome extension (TypeScript)
+├── popup/                   # Extension UI (React)
+│   ├── Dashboard.tsx        # Main UI: Scan → Analyze → Write
+│   ├── Onboarding.tsx       # 2-step onboarding
+│   └── Popup.tsx            # Root router
 ├── background/
-│   └── service-worker.ts        # Network proxy + screenshot handling
+│   └── service-worker.ts    # API proxy to localhost:3721
 ├── content/
-│   └── content-script.ts        # Page text extraction
-├── shared/
-│   ├── filesystem.ts            # File System Access helpers (pick/read resume)
-│   ├── scan.ts                  # API call wrappers (popup → service worker → server)
-│   ├── storage.ts               # chrome.storage.local config
-│   └── types.ts                 # UserConfig type
-└── services/
-    ├── scanner.ts               # Screenshot capture + save
-    └── mastra/
-        ├── index.ts             # Mastra instance
-        └── agents/
-            ├── posting-analysis-agent.ts
-            └── resume-writer.ts
+│   └── content-script.ts    # Page text extraction
+├── services/
+│   └── scanner.ts           # Screenshot capture
+└── shared/
+    ├── types.ts             # Type definitions
+    ├── storage.ts           # chrome.storage.local helpers
+    └── scan.ts              # API call wrappers
+
+server/                      # Python backend (LangChain + FastAPI)
+├── app.py                   # FastAPI server (port 3721)
+├── requirements.txt         # Python dependencies
+├── agents/
+│   ├── posting_analysis.py  # Simple LLM call for job extraction
+│   └── resume_writer.py     # LangGraph agent with writer + shell tools
+├── tools/
+│   └── __init__.py          # writer tool (save .typ to temp/)
+└── scripts/
+    └── test_writer.py       # End-to-end pipeline test
 ```
 
 ## Setup
 
+### 1. Python server
+
 ```bash
-bun install
+cd server
+pip install -r requirements.txt
 ```
 
-Copy `.env.example` to `.env` (or set `DEEPSEEK_API_KEY`):
-```bash
-cp .env.example .env
+Create `server/.env` with your DeepSeek API key:
 ```
+DEEPSEEK_API_KEY=sk-...
+```
+
+Install Typst CLI (for PDF compilation):
+```bash
+# macOS
+brew install typst
+
+# Linux
+curl -fsSL https://github.com/typst/typst/releases/latest/download/typst-x86_64-unknown-linux-musl.tar.xz | tar xJ
+sudo mv typst-x86_64-unknown-linux-musl/typst /usr/local/bin/
+```
+
+### 2. Chrome extension
+
+```bash
+bun install
+bun run build:extension
+```
+
+Load `extension/` as an unpacked extension in `chrome://extensions`.
 
 ## Development
 
 ```bash
-# Start the Mastra server (port 3721, hot-reload)
-bun dev
+# Terminal 1: Start the Python server
+cd server && python3 app.py
 
-# In another terminal: build + watch the extension
+# Terminal 2: Build + watch the extension
 bun dev:extension
 ```
-
-Then load the `extension/` directory as an unpacked extension in `chrome://extensions`.
 
 ## Build
 
 ```bash
-bun build:extension
+bun build:extension        # Output: extension/ — load in chrome://extensions
 ```
-
-Output goes to `extension/` — load it in `chrome://extensions`.
-
-## Test the agents
-
-```bash
-bun scripts/test-profile.ts <resume-file> <job-posting-file> [api-key]
-```
-
-Runs both agents end-to-end: analyzes the posting, then writes a tailored Typst resume.
 
 ## API endpoints
 
-| Endpoint | Method | Description |
-|---|---|---|
-| `/` | `GET` | Health check |
-| `/api/save-key` | `POST` | Persist DeepSeek API key to `.mastra/api_key` |
-| `/api/analyze-posting` | `POST` | Analyze job posting text |
-| `/api/write-resume` | `POST` | Generate tailored Typst resume source |
+| Endpoint | Method | Body | Description |
+|---|---|---|---|
+| `/api/analyze-posting` | `POST` | `{ text }` | Analyze job posting text |
+| `/api/write-resume` | `POST` | `{ resumePath, analysis }` | Generate tailored `.typ` + compile PDF |
+| `/api/download/typ` | `GET` | — | Download latest `.typ` file |
+| `/api/download/pdf` | `GET` | — | Download latest `.pdf` file |
+
+Output files are written to `temp/` (project root). The PDF file exists only if `typst` CLI is installed.
+
+## Test the pipeline
+
+```bash
+python3 server/scripts/test_writer.py
+# or with your own files:
+python3 server/scripts/test_writer.py ~/resume.typ ~/job.txt "Name" "Role" "Industry"
+```
 
 ## Tech stack
 
-- **Runtime**: [Bun](https://bun.com)
-- **Agents**: [Mastra](https://mastra.ai) (posting analysis, resume writing)
-- **LLM**: DeepSeek (`deepseek-v4-flash`) via `@ai-sdk/deepseek`
-- **Resume format**: [Typst](https://typst.app) source generation
-- **Extension**: Chrome MV3, React 19, File System Access API
-- **Dev tools**: TypeScript 6, Bun bundler, WebSocket hot-reload
+- **Backend**: Python, [FastAPI](https://fastapi.tiangolo.com/), [LangChain](https://langchain.com), [LangGraph](https://langchain-ai.github.io/langgraph/)
+- **LLM**: DeepSeek via `langchain-deepseek`
+- **Resume format**: [Typst](https://typst.app)
+- **Extension**: Chrome MV3, React 19, TypeScript, [Bun](https://bun.com)
