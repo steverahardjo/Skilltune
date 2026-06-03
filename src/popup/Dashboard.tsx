@@ -64,6 +64,10 @@ export function Dashboard({ onRescanSetup }: Props) {
   const canWrite = !!analysis
 
   const handleWriteResume = async () => {
+    if (!config?.resumeFile) {
+      setError("No resume file configured.\n→ Run onboarding again (click the avatar icon above)")
+      return
+    }
     if (!analysis) {
       setError("No job posting analysis yet.\n→ Click 'Analyze posting' first")
       return
@@ -72,7 +76,7 @@ export function Dashboard({ onRescanSetup }: Props) {
     setError(null)
     setResult(null)
     try {
-      const res = await requestResumeWrite(analysis)
+      const res = await requestResumeWrite(config.resumeFile, analysis)
       setResult(res)
     } catch (e) {
       setError(e instanceof Error ? e.message : "Write resume failed")

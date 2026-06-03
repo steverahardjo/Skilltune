@@ -8,9 +8,6 @@ async function apiCall<T>(
   label: string
 ): Promise<T> {
   console.log(`[apiCall] ▶ ${label} ${endpoint}`)
-  console.log(`[apiCall] body sizes:`, Object.entries(body)
-    .map(([k, v]) => `${k}=${v.length}chars`)
-    .join(", "))
 
   try {
     const response = await chrome.runtime.sendMessage({
@@ -20,16 +17,12 @@ async function apiCall<T>(
     })
 
     if (!response) {
-      throw new Error(
-        `Service worker did not respond\n→ ${label}\n→ Reload extension in chrome://extensions`
-      )
+      throw new Error(`Service worker did not respond\n→ Reload extension in chrome://extensions`)
     }
 
     if (!response.ok) {
       const detail = response.data?.error ?? JSON.stringify(response.data)
-      throw new Error(
-        `Server returned HTTP ${response.status}\n→ ${label}\n→ ${detail}`
-      )
+      throw new Error(`Server returned HTTP ${response.status}\n→ ${detail}`)
     }
 
     return response.data
@@ -60,7 +53,6 @@ export async function extractPageText(): Promise<{
     const extracted = await chrome.tabs.sendMessage(tab.id, { type: "SCAN_PAGE" })
     return { title: extracted.title, url: extracted.url, text: extracted.text }
   } catch {
-    // content script not loaded yet — inject on demand
     const results = await chrome.scripting.executeScript({
       target: { tabId: tab.id },
       func: () => {
@@ -84,35 +76,15 @@ export async function resetSession(): Promise<void> {
   await clearConfig()
 }
 
-export async function requestCreateSkill(
-  resumePath: string,
-  name: string,
-  targetRoles: string,
-  industry: string,
-): Promise<{ skillCreated: boolean }> {
-  return apiCall(
-    "/api/create-skill",
-    { resumePath, name, targetRoles, industry },
-    "Create skill"
-  )
-}
-
 export async function requestPostingAnalysis(
   text: string,
 ): Promise<{ analysis: string }> {
-  return apiCall(
-    "/api/analyze-posting",
-    { text },
-    "Posting analysis"
-  )
+  return apiCall("/api/analyze-posting", { text }, "Posting analysis")
 }
 
 export async function requestResumeWrite(
+  resumePath: string,
   analysis: string,
 ): Promise<WriteResumeResponse> {
-  return apiCall(
-    "/api/write-resume",
-    { analysis },
-    "Resume writer"
-  )
+  return apiCall("/api/write-resume", { resumePath, analysis }, "Resume writer")
 }

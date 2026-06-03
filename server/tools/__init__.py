@@ -2,7 +2,7 @@ from langchain_core.tools import tool
 from pathlib import Path
 
 BASE_DIR = Path(__file__).resolve().parent.parent.parent
-OUT_DIR = BASE_DIR / ".mastra" / "output"
+OUT_DIR = BASE_DIR / "temp"
 
 
 @tool
@@ -11,7 +11,7 @@ def writer(filename: str, content: str) -> str:
     Use this to persist the tailored resume before compiling it.
 
     Args:
-        filename: Filename for the output (e.g. 'tailored_resume.typ')
+        filename: Filename for the output (e.g. 'cloudscale_swe.typ')
         content: The complete Typst source code to write
     """
     OUT_DIR.mkdir(parents=True, exist_ok=True)

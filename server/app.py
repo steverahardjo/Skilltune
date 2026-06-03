@@ -9,17 +9,11 @@ from pydantic import BaseModel
 
 from agents.posting_analysis import create_posting_agent, analyze_posting
 from agents.resume_writer import create_resume_agent
-from skills.skill_manager import get_skill_content, create_skill
 
 load_dotenv()
 
 BASE_DIR = Path(__file__).resolve().parent.parent
-KEY_DIR = BASE_DIR / ".mastra"
-OUT_DIR = KEY_DIR / "output"
-SKILL_DIR = KEY_DIR / "skills"
-SCREENSHOTS_DIR = KEY_DIR / "screenshots"
-TYP_OUTPUT = OUT_DIR / "tailored_resume.typ"
-PDF_OUTPUT = OUT_DIR / "tailored_resume.pdf"
+TEMP_DIR = BASE_DIR / "temp"
 
 app = FastAPI(title="Resume Adjuster")
 
@@ -39,39 +33,7 @@ def _get_api_key() -> str:
     return key
 
 
-def _read_resume(path: str) -> str:
-    try:
-        return Path(path).read_text().strip()
-    except Exception:
-        raise HTTPException(400, f"Cannot read resume file: {path}")
-
-
 # ── API Routes ──
-
-
-class CreateSkillPayload(BaseModel):
-    resumePath: str
-    name: str
-    targetRoles: str = ""
-    industry: str = ""
-
-
-@app.post("/api/create-skill")
-def api_create_skill(payload: CreateSkillPayload):
-    api_key = _get_api_key()
-    os.environ["DEEPSEEK_API_KEY"] = api_key
-
-    resume = _read_resume(payload.resumePath)
-    model = create_posting_agent()
-    skill = create_skill(
-        model,
-        resume,
-        payload.name,
-        payload.targetRoles,
-        payload.industry,
-    )
-    print(f"[create-skill] Created ({len(skill)} chars)")
-    return {"skillCreated": True}
 
 
 class AnalyzePayload(BaseModel):
@@ -83,7 +45,7 @@ def api_analyze_posting(payload: AnalyzePayload):
     api_key = _get_api_key()
     os.environ["DEEPSEEK_API_KEY"] = api_key
 
-    text = payload.text.replace("\n{2,}", "\n").strip()
+    text = payload.text.strip()
     print(f"[analyze] Text: {len(text)} chars")
 
     model = create_posting_agent()
@@ -93,6 +55,7 @@ def api_analyze_posting(payload: AnalyzePayload):
 
 
 class WriteResumePayload(BaseModel):
+    resumePath: str
     analysis: str
 
 
@@ -101,75 +64,76 @@ def api_write_resume(payload: WriteResumePayload):
     api_key = _get_api_key()
     os.environ["DEEPSEEK_API_KEY"] = api_key
 
-    skill = get_skill_content()
-    if not skill:
-        raise HTTPException(400, "No resume skill found. Re-run onboarding.")
+    try:
+        resume_content = Path(payload.resumePath).read_text().strip()
+    except Exception:
+        raise HTTPException(400, f"Cannot read resume file: {payload.resumePath}")
 
-    print(f"[write] Skill: {len(skill)} chars, Analysis: {len(payload.analysis)} chars")
+    print(f"[write] Resume: {len(resume_content)} chars, Analysis: {len(payload.analysis)} chars")
 
     agent = create_resume_agent()
-    prompt = f"""Write a tailored Typst resume using the RESUME SKILL and JOB ANALYSIS below.
-Use your tools to write the .typ file and compile it.
+    from langchain_core.messages import HumanMessage
 
-RESUME SKILL (the person's professional profile — source of truth):
---- skill ---
-{skill}
---- end skill ---
+    result = agent.invoke({"messages": [HumanMessage(content=f"""Write a tailored Typst resume using the reference resume and job analysis below.
+
+RESUME TYPST SOURCE (use this for style, formatting, and the user's actual background):
+--- resume.typ ---
+{resume_content[:6000]}
+--- end resume ---
 
 JOB POSTING ANALYSIS:
 {payload.analysis}
 
 Follow the workflow:
-1. Study the RESUME SKILL and JOB ANALYSIS
-2. Write a tailored Typst resume matching the job
-3. Use the writer tool to save it as "tailored_resume.typ"
-4. Use the typst_compile tool to compile it to PDF
-5. Confirm the file paths"""
+1. Study the RESUME TYPST SOURCE — understand the person's background, and replicate the Typst style (fonts, spacing, layout, heading styles)
+2. Study the JOB POSTING ANALYSIS — understand what the employer wants
+3. Write a tailored Typst resume using the same visual style, with content tweaked for the job
+4. Use the writer tool to save the .typ file
+5. Use the terminal tool to compile: typst compile <path>/<file>.typ <path>/<file>.pdf
+6. Report the file paths""")]})
 
-    from langchain_core.messages import HumanMessage
-
-    result = agent.invoke({"messages": [HumanMessage(content=prompt)]})
     messages = result["messages"]
     final = messages[-1].content if messages else ""
 
+    # read the output .typ file (most recently written)
     typ_content = None
-    try:
-        typ_content = TYP_OUTPUT.read_text()
-    except Exception:
-        pass
+    typ_path = None
+    if TEMP_DIR.exists():
+        for f in sorted(TEMP_DIR.glob("*.typ"), key=lambda p: p.stat().st_mtime, reverse=True):
+            typ_content = f.read_text()
+            typ_path = str(f)
+            break
 
-    pdf_exists = PDF_OUTPUT.exists()
+    pdf_path = None
+    if typ_path:
+        candidate = typ_path.replace(".typ", ".pdf")
+        if Path(candidate).exists():
+            pdf_path = candidate
 
-    return JSONResponse(
-        {
-            "typ": typ_content or str(final),
-            "typPath": str(TYP_OUTPUT),
-            "pdfPath": str(PDF_OUTPUT) if pdf_exists else None,
-            "message": str(final),
-        }
-    )
+    return JSONResponse({
+        "typ": typ_content or str(final),
+        "typPath": typ_path or "",
+        "pdfPath": pdf_path,
+        "message": str(final),
+    })
 
 
 @app.get("/api/download/typ")
 def api_download_typ():
-    if not TYP_OUTPUT.exists():
+    files = sorted(TEMP_DIR.glob("*.typ"), key=lambda p: p.stat().st_mtime, reverse=True)
+    if not files:
         raise HTTPException(404, "Not found")
-    return FileResponse(
-        str(TYP_OUTPUT),
-        media_type="text/plain",
-        filename="tailored_resume.typ",
-    )
+    path = str(files[0])
+    return FileResponse(path, media_type="text/plain", filename=files[0].name)
 
 
 @app.get("/api/download/pdf")
 def api_download_pdf():
-    if not PDF_OUTPUT.exists():
+    files = sorted(TEMP_DIR.glob("*.pdf"), key=lambda p: p.stat().st_mtime, reverse=True)
+    if not files:
         raise HTTPException(404, "Not found")
-    return FileResponse(
-        str(PDF_OUTPUT),
-        media_type="application/pdf",
-        filename="tailored_resume.pdf",
-    )
+    path = str(files[0])
+    return FileResponse(path, media_type="application/pdf", filename=files[0].name)
 
 
 if __name__ == "__main__":
