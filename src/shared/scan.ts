@@ -1,6 +1,6 @@
 import { captureScreenshot, saveCapture } from "../services/scanner"
 import { clearConfig } from "./storage"
-import type { WriteResumeResponse, JobScoreResponse } from "./types"
+import type { WriteResumeResponse, JobScoreResponse, SearchJobDescResponse } from "./types"
 
 async function apiCall<T>(
   endpoint: string,
@@ -89,22 +89,35 @@ export async function resetSession(): Promise<void> {
   await clearConfig()
 }
 
+export async function searchJobDesc(
+  link: string,
+  loginType: string = "jd",
+): Promise<SearchJobDescResponse> {
+  return apiCall("/api/search-job-desc", { link, login_type: loginType }, "Search job desc")
+}
+
 export async function requestPostingAnalysis(
   text: string,
+  link: string = "",
+  loginType: string = "jd",
 ): Promise<{ analysis: string }> {
-  return apiCall("/api/analyze-posting", { text }, "Posting analysis")
+  return apiCall("/api/analyze-posting", { text, link, login_type: loginType }, "Posting analysis")
 }
 
 export async function requestResumeWrite(
   resumePath: string,
   analysis: string,
+  link: string = "",
+  loginType: string = "jd",
 ): Promise<WriteResumeResponse> {
-  return apiCall("/api/write-resume", { resumePath, analysis }, "Resume writer")
+  return apiCall("/api/write-resume", { resumePath, analysis, link, login_type: loginType }, "Resume writer")
 }
 
 export async function requestJobScore(
   resumePath: string,
   analysis: string,
+  link: string = "",
+  loginType: string = "jd",
 ): Promise<JobScoreResponse> {
-  return apiCall("/api/job-score", { resumePath, analysis }, "Job score")
+  return apiCall("/api/job-score", { resumePath, analysis, link, login_type: loginType }, "Job score")
 }

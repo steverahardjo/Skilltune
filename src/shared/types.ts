@@ -23,4 +23,18 @@ export interface JobScoreResponse {
   summary: string
 }
 
+export interface ScanResult {
+  link: string
+  date: string
+  typst_syntax: string
+  analysis: string
+  login_type: string
+  created_at: string
+}
+
+export interface SearchJobDescResponse {
+  found: boolean
+  data: ScanResult | null
+}
+
 export type AppView = "onboarding" | "dashboard" | "loading"

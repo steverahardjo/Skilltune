@@ -1,6 +1,6 @@
 import "./theme.css"
 import { useState, useEffect } from "react"
-import type { UserConfig, WriteResumeResponse, JobScoreResponse } from "../shared/types"
+import type { UserConfig, WriteResumeResponse, JobScoreResponse, ScanResult } from "../shared/types"
 import { loadConfig } from "../shared/storage"
 import {
   extractPageText,
@@ -9,6 +9,7 @@ import {
   requestJobScore,
   resetSession,
   checkServerHealth,
+  searchJobDesc,
 } from "../shared/scan"
 
 interface Props {
@@ -25,10 +26,28 @@ export function Dashboard({ onRescanSetup }: Props) {
   const [serverUp, setServerUp] = useState(true)
   const [scoring, setScoring] = useState(false)
   const [jobScore, setJobScore] = useState<JobScoreResponse | null>(null)
+  const [pageUrl, setPageUrl] = useState("")
+  const [loadingOld, setLoadingOld] = useState(true)
 
   useEffect(() => {
     loadConfig().then(setConfig)
     checkServerHealth().then(setServerUp)
+    extractPageText().then(page => {
+      setPageUrl(page.url)
+      return searchJobDesc(page.url, "jd")
+    }).then(res => {
+      if (res.found && res.data) {
+        setAnalysis(res.data.analysis)
+        if (res.data.typst_syntax) {
+          setResult({
+            success: true,
+            sourcePath: "",
+            pdfPath: null,
+            message: res.data.typst_syntax,
+          })
+        }
+      }
+    }).catch(() => {}).finally(() => setLoadingOld(false))
   }, [])
 
   const handleAnalyze = async () => {
@@ -39,7 +58,8 @@ export function Dashboard({ onRescanSetup }: Props) {
     try {
       const page = await extractPageText()
       if (!page.text) throw new Error("No text found on this page")
-      const res = await requestPostingAnalysis(page.text)
+      setPageUrl(page.url)
+      const res = await requestPostingAnalysis(page.text, page.url, "jd")
       setAnalysis(res.analysis)
     } catch (e) {
       setError(e instanceof Error ? e.message : "Analysis failed")
@@ -63,7 +83,7 @@ export function Dashboard({ onRescanSetup }: Props) {
     setError(null)
     setResult(null)
     try {
-      const res = await requestResumeWrite(config.resumeFile, analysis)
+      const res = await requestResumeWrite(config.resumeFile, analysis, pageUrl, "jd")
       setResult(res)
     } catch (e) {
       setError(e instanceof Error ? e.message : "Write resume failed")
@@ -79,7 +99,7 @@ export function Dashboard({ onRescanSetup }: Props) {
     setError(null)
     setJobScore(null)
     try {
-      const res = await requestJobScore(config.resumeFile, analysis)
+      const res = await requestJobScore(config.resumeFile, analysis, pageUrl, "jd")
       setJobScore(res)
     } catch (e) {
       setError(e instanceof Error ? e.message : "Score failed")
@@ -250,24 +270,21 @@ export function Dashboard({ onRescanSetup }: Props) {
             </svg>
             <span style={{ fontWeight: 600, fontSize: 14, color: "#0d904f" }}>Resume written</span>
           </div>
-          {result.message && (
-            <div style={{ fontSize: 12, color: "#666", marginBottom: 8 }}>{result.message}</div>
+          {result.pdfPath ? (
+            <button className="download-btn" onClick={handleDownloadPdf} style={{ background: "#111", borderColor: "#111", color: "#fff" }}>
+              <svg className="download-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                <polyline points="7,10 12,15 17,10" />
+                <line x1="12" y1="15" x2="12" y2="3" />
+              </svg>
+              Download PDF
+            </button>
+          ) : (
+            <div style={{ fontSize: 12, color: "#666" }}>
+              {result.message && <span>{result.message}</span>}
+              {!result.message && <span style={{ fontStyle: "italic", color: "#888" }}>Writing resume...</span>}
+            </div>
           )}
-          <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-            {result.pdfPath && (
-              <button className="download-btn" onClick={handleDownloadPdf} style={{ background: "#111", borderColor: "#111", color: "#fff" }}>
-                <svg className="download-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                  <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
-                  <polyline points="7,10 12,15 17,10" />
-                  <line x1="12" y1="15" x2="12" y2="3" />
-                </svg>
-                Download PDF
-              </button>
-            )}
-            {!result.pdfPath && (
-              <span style={{ fontSize: 11, color: "#888", fontStyle: "italic" }}>PDF will appear after compilation</span>
-            )}
-          </div>
         </div>
       )}
 

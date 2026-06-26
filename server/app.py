@@ -9,14 +9,16 @@ from fastapi.responses import FileResponse, JSONResponse
 from pydantic import BaseModel
 
 from agents.posting_analysis import create_posting_agent, analyze_posting
-from agents.resume_writer import create_resume_agent
+from agents.resume_writer import write_resume
 from agents.job_scorer import score_job
-from agents.csv_writer import create_csv_agent
+from database import init_db, save_scan, get_scan, get_all_scans
 
 load_dotenv()
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 TEMP_DIR = BASE_DIR / "temp"
+
+init_db()
 
 app = FastAPI(title="Skilltune")
 
@@ -46,6 +48,21 @@ def health():
 
 class AnalyzePayload(BaseModel):
     text: str
+    link: str = ""
+    login_type: str = "jd"
+
+
+class SearchJobDescPayload(BaseModel):
+    link: str
+    login_type: str = "jd"
+
+
+@app.post("/api/search-job-desc")
+def api_search_job_desc(payload: SearchJobDescPayload):
+    result = get_scan(payload.link, payload.login_type)
+    if not result:
+        return {"found": False, "data": None}
+    return {"found": True, "data": result}
 
 
 @app.post("/api/analyze-posting")
@@ -65,6 +82,8 @@ def api_analyze_posting(payload: AnalyzePayload):
 class JobScorePayload(BaseModel):
     resumePath: str
     analysis: str
+    link: str = ""
+    login_type: str = "jd"
 
 
 @app.post("/api/job-score")
@@ -88,7 +107,8 @@ def api_job_score(payload: JobScorePayload):
 class WriteResumePayload(BaseModel):
     resumePath: str
     analysis: str
-
+    link: str = ""
+    login_type: str = "jd"
 
 @app.post("/api/write-resume")
 def api_write_resume(payload: WriteResumePayload):
@@ -100,75 +120,50 @@ def api_write_resume(payload: WriteResumePayload):
     except Exception:
         raise HTTPException(400, f"Cannot read resume file: {payload.resumePath}")
 
+    ext = Path(payload.resumePath).suffix.lower()
     print(f"[write] Resume: {len(resume_content)} chars, Analysis: {len(payload.analysis)} chars")
 
-    ext = Path(payload.resumePath).suffix.lower()
-    fmt = "Typst" if ext == ".typ" else "LaTeX"
-    compile_cmd = (
-        f"typst compile <path>/<file>.typ <path>/<file>.pdf"
-        if ext == ".typ"
-        else f"pdflatex -interaction=nonstopmode -output-directory=<dir> <file>"
-    )
-    out_glob = "*.typ" if ext == ".typ" else "*.tex"
-
-    agent = create_resume_agent()
-    from langchain_core.messages import HumanMessage
+    # Detect format from source content, not just extension
+    if "\\documentclass" in resume_content or "\\begin{document}" in resume_content:
+        fmt_key = "latex"
+    elif "#set " in resume_content or "#let " in resume_content or "#show " in resume_content:
+        fmt_key = "typst"
+    else:
+        fmt_key = "typst" if ext == ".typ" else "latex"
 
     today = date.today().isoformat()
-    result = agent.invoke({"messages": [HumanMessage(content=f"""Write a tailored {fmt} resume using the reference resume and job analysis below.
-
-RESUME SOURCE (use this for style, formatting, and the user's actual background):
---- resume{ext} ---
-{resume_content[:6000]}
---- end resume ---
-
-JOB POSTING ANALYSIS:
-{payload.analysis}
-
-Follow the workflow:
-1. Study the RESUME SOURCE — understand the person's background, and replicate the {fmt} style (fonts, spacing, layout, heading styles, document class, packages)
-2. Study the JOB POSTING ANALYSIS — understand what the employer wants
-3. Write a tailored {fmt} resume using the same visual style, with content tweaked for the job
-4. Use the writer tool to save the file with the filename: <company>_<role>_{today}{ext}
-5. Use the terminal tool to compile: {compile_cmd}
-6. Report the file paths""")]})
-
-    messages = result["messages"]
-    final = messages[-1].content if messages else ""
-
-    source_path = None
-    pdf_ext = ".pdf"
-    if TEMP_DIR.exists():
-        for f in sorted(TEMP_DIR.glob(out_glob), key=lambda p: p.stat().st_mtime, reverse=True):
-            source_path = str(f)
-            break
+    source_path = Path(write_resume(resume_content, payload.analysis, fmt=fmt_key))
+    content = source_path.read_text()
 
     pdf_path = None
-    if source_path:
-        for ext in [".typ", ".tex"]:
-            candidate = source_path.replace(ext, pdf_ext)
-            if Path(candidate).exists():
-                pdf_path = candidate
-                break
-
-    # ── Log to CSV ──
+    import subprocess
+    ppath = source_path.with_suffix(".pdf")
     try:
-        csv_agent = create_csv_agent()
-        csv_agent.invoke({"messages": [HumanMessage(content=f"""Log this job application.
-
-JOB SUMMARY:
-{payload.analysis[:2000]}
-
-DATE: {today}""")]})
-        print(f"[write] Application logged to temp/applications.csv")
+        if fmt_key == "typst":
+            result = subprocess.run(
+                ["typst", "compile", str(source_path), str(ppath)],
+                capture_output=True, text=True, timeout=30,
+            )
+            print(f"[write] typst compile: rc={result.returncode}, stdout='{result.stdout[:200]}', stderr='{result.stderr[:200]}'")
+        else:
+            result = subprocess.run(
+                ["pdflatex", "-interaction=nonstopmode",
+                 "-output-directory", str(source_path.parent), str(source_path.name)],
+                capture_output=True, text=True, timeout=30, cwd=str(source_path.parent),
+            )
+            print(f"[write] pdflatex compile: rc={result.returncode}, stderr='{result.stderr[:200]}'")
+        if ppath.exists():
+            pdf_path = str(ppath)
     except Exception as e:
-        print(f"[write] CSV logging failed (non-fatal): {e}")
+        print(f"[write] Compile failed: {e}")
+
+    save_scan(payload.link, today, content, payload.analysis, payload.login_type)
 
     return JSONResponse({
         "success": True,
-        "sourcePath": source_path or "",
+        "sourcePath": str(source_path),
         "pdfPath": pdf_path,
-        "message": str(final),
+        "message": content,
     })
 
 

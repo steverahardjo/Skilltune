@@ -9,12 +9,12 @@ CSV_PATH = OUT_DIR / "applications.csv"
 
 @tool
 def writer(filename: str, content: str) -> str:
-    """Write the Typst resume source code to a local .typ file.
+    """Write the resume source code to a local file (.typ or .tex).
     Use this to persist the tailored resume before compiling it.
 
     Args:
-        filename: Filename for the output (e.g. 'cloudscale_swe.typ')
-        content: The complete Typst source code to write
+        filename: Filename for the output (e.g. 'software_engineer_acme_2026-06-25.typ')
+        content: The complete resume source code to write
     """
     OUT_DIR.mkdir(parents=True, exist_ok=True)
     filepath = OUT_DIR / filename
