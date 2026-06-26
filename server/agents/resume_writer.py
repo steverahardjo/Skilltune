@@ -31,7 +31,7 @@ You have:
 TYPST NOTES:
 - Use Typst-native functions: #set text(), #set par(), #v(), #h(), #grid(), #align()
 - Use only standard fonts available on most systems: "DejaVu Sans", "DejaVu Serif", "DejaVu Sans Mono", "C059" (do NOT use "IBM Plex Sans", "Libertinus", or other niche fonts)
-- Write email addresses WITHOUT angle brackets: just `john@example.com` — do NOT wrap in `<` `>` as Typst interprets that as a label reference
+- Write email addresses wrapped in `#text("...")` to prevent Typst from interpreting `@` as a label: `#text("john@example.com")`
 
 You MUST use the `writer` tool to save the file. First identify the position title and company name from the job analysis, then use them in the filename."""
 

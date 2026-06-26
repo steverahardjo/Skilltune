@@ -10,6 +10,9 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
+from database import init_db, save_scan, get_scan, get_all_scans, truncate_jd_link
+from agents.resume_writer import _sanitize, _fallback_name
+
 # ── Helpers ──
 
 def need_api_key():
@@ -126,6 +129,105 @@ class TestWriteResumeErrors:
                 "analysis": "test",
             })
         assert r.status_code in (400, 500)
+
+
+# ── Database ──
+
+class TestDatabase:
+    def test_truncate_jd_link(self):
+        assert truncate_jd_link("https://example.com/job/12345/jwt.eyJhbGci") == "https://example.com/job/12345"
+        assert truncate_jd_link("https://example.com/job/12345") == "https://example.com/job/12345"
+        assert truncate_jd_link("https://linkedin.com/jobs/view/12345") == "https://linkedin.com/jobs/view/12345"
+
+    def test_save_and_get_scan(self):
+        save_scan("https://example.com/job/99", "2026-06-26", "typst content", "analysis text", "jd")
+        result = get_scan("https://example.com/job/99", "jd")
+        assert result is not None
+        assert result["link"] == "https://example.com/job/99"
+        assert result["date"] == "2026-06-26"
+        assert result["typst_syntax"] == "typst content"
+        assert result["analysis"] == "analysis text"
+        assert result["login_type"] == "jd"
+
+    def test_get_scan_not_found(self):
+        assert get_scan("https://example.com/nonexistent") is None
+
+    def test_get_scan_with_jwt_url(self):
+        save_scan("https://example.com/job/42/some.jwt.token", "2026-06-25", "c", "a", "jd")
+        result = get_scan("https://example.com/job/42/different.jwt", "jd")
+        assert result is not None
+        assert result["link"] == "https://example.com/job/42"
+
+    def test_get_all_scans(self):
+        all_before = len(get_all_scans())
+        save_scan("https://test.com/job/1", "2026-01-01", "t1", "a1", "jd")
+        save_scan("https://test.com/job/2", "2026-01-02", "t2", "a2", "jd")
+        all_after = get_all_scans()
+        assert len(all_after) == all_before + 2
+
+    def test_save_twice_replaces(self):
+        save_scan("https://dup.com/job/1", "2026-01-01", "old", "old", "jd")
+        save_scan("https://dup.com/job/1", "2026-01-02", "new", "new", "jd")
+        result = get_scan("https://dup.com/job/1", "jd")
+        assert result["typst_syntax"] == "new"
+        assert result["date"] == "2026-01-02"
+
+
+# ── Resume Writer helpers ──
+
+class TestResumeWriterHelpers:
+    def test_sanitize(self):
+        assert _sanitize("Senior Software Engineer @ Google!") == "senior_software_engineer_google"
+        assert _sanitize("  Hello   World  ") == "hello_world"
+        assert _sanitize("") == ""
+
+    def test_fallback_name_with_fields(self):
+        analysis = "Job title: Data Scientist\nCompany: AI Corp"
+        name = _fallback_name(analysis, "2026-06-26", ".typ")
+        assert name == "data_scientist_ai_corp_2026-06-26.typ"
+
+    def test_fallback_name_missing_fields(self):
+        analysis = "No clear fields here"
+        name = _fallback_name(analysis, "2026-06-26", ".tex")
+        assert name == "resume_company_2026-06-26.tex"
+
+
+# ── Search Job Desc API ──
+
+class TestSearchJobDesc:
+    def test_not_found(self, client):
+        r = client.post("/api/search-job-desc", json={
+            "link": "https://example.com/none",
+            "login_type": "jd",
+        })
+        assert r.status_code == 200
+        data = r.json()
+        assert data["found"] is False
+        assert data["data"] is None
+
+    def test_found(self, client):
+        save_scan("https://example.com/job/found/", "2026-06-26", "typst", "analysis", "jd")
+        r = client.post("/api/search-job-desc", json={
+            "link": "https://example.com/job/found/",
+            "login_type": "jd",
+        })
+        assert r.status_code == 200
+        data = r.json()
+        assert data["found"] is True
+        assert data["data"]["link"] == "https://example.com/job/found/"
+        assert data["data"]["typst_syntax"] == "typst"
+        assert data["data"]["analysis"] == "analysis"
+
+    def test_found_with_jwt(self, client):
+        save_scan("https://example.com/job/jwt-test/jwt.token.here", "2026-06-26", "c", "a", "jd")
+        r = client.post("/api/search-job-desc", json={
+            "link": "https://example.com/job/jwt-test/different.jwt",
+            "login_type": "jd",
+        })
+        assert r.status_code == 200
+        data = r.json()
+        assert data["found"] is True
+        assert data["data"]["link"] == "https://example.com/job/jwt-test"
 
 
 # ── Download ──

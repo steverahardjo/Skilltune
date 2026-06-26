@@ -1,10 +1,12 @@
 import os
 import tempfile
 from pathlib import Path
+from unittest.mock import patch
 
 import pytest
 from fastapi.testclient import TestClient
 
+import database
 from app import app, TEMP_DIR
 
 
@@ -118,6 +120,17 @@ def tex_file(sample_resume_tex, tmp_path):
     path = tmp_path / "test_resume.tex"
     path.write_text(sample_resume_tex)
     return str(path)
+
+
+@pytest.fixture(autouse=True)
+def test_db(tmp_path):
+    """Use an isolated temp database for each test session."""
+    db_path = tmp_path / "test_scan_results.db"
+    with patch.object(database, "DB_PATH", db_path):
+        database.init_db()
+        yield
+        if db_path.exists():
+            db_path.unlink()
 
 
 @pytest.fixture(autouse=True)
