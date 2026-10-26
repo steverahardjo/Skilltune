@@ -23,6 +23,15 @@ requires_ai = pytest.mark.skipif(
     reason="Set DEEPSEEK_API_KEY and unset SKIP_AI to run AI tests",
 )
 
+def have_pdflatex():
+    import shutil
+    return shutil.which("pdflatex") is not None
+
+requires_latex = pytest.mark.skipif(
+    not have_pdflatex(),
+    reason="pdflatex not installed",
+)
+
 
 # ── Health ──
 
@@ -102,6 +111,7 @@ class TestWriteResume:
         assert data["message"]
 
     @requires_ai
+    @requires_latex
     def test_latex(self, client, tex_file, sample_job_analysis):
         r = client.post("/api/write-resume", json={
             "resumePath": tex_file,

@@ -1,6 +1,4 @@
 from dataclasses import dataclass, field
-from pathlib import Path
-
 from sklearn.feature_extraction.text import TfidfVectorizer, ENGLISH_STOP_WORDS
 from sklearn.metrics.pairwise import cosine_similarity
 
@@ -47,10 +45,8 @@ def compute_semantic(resume: str, job: str) -> tuple[float, list[str], list[str]
     return (round(sim * 100, 1), matches, missing)
 
 
-def score_job(resume_path: str, job_analysis: str) -> JobScore:
-    resume = Path(resume_path).read_text()
-
-    similarity_pct, key_matches, key_missing = compute_semantic(resume, job_analysis)
+def score_job(resume_content: str, job_analysis: str) -> JobScore:
+    similarity_pct, key_matches, key_missing = compute_semantic(resume_content, job_analysis)
 
     model = ChatDeepSeek(model="deepseek-chat")
 
@@ -63,7 +59,7 @@ SEMANTIC METRICS:
 
 RESUME:
 --- resume ---
-{resume[:5000]}
+{resume_content[:5000]}
 --- end resume ---
 
 JOB POSTING ANALYSIS:

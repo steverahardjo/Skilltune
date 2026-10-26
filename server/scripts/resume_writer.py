@@ -83,20 +83,15 @@ def main():
     out_dir = Path(args.out_dir) if args.out_dir else resume_path.parent
     out_dir.mkdir(parents=True, exist_ok=True)
 
-    today = date.today().isoformat()
-    out_name = f"tailored_resume_{today}{ext}"
-    out_path = out_dir / out_name
-
     print(f"Resume: {len(resume_content)} chars  |  Analysis: {len(analysis)} chars")
-    print(f"Format: {fmt_name}  |  Output: {out_path}\n")
+    print(f"Format: {fmt_name}\n")
 
     T0 = time.time()
 
     print("── Generating resume ──")
-    content = write_resume(resume_content, analysis, fmt=fmt)
-
-    out_path.write_text(content)
+    out_path = Path(write_resume(str(resume_path), analysis, fmt=fmt))
     elapsed = (time.time() - T0) * 1000
+    content = out_path.read_text()
     lines = len(content.splitlines())
     print(f"  {elapsed:.0f}ms  |  {len(content)} bytes, {lines} lines\n")
 

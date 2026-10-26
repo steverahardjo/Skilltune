@@ -90,7 +90,11 @@ class JobScorePayload(BaseModel):
 def api_job_score(payload: JobScorePayload):
     api_key = _get_api_key()
     os.environ["DEEPSEEK_API_KEY"] = api_key
-    result = score_job(payload.resumePath, payload.analysis)
+    try:
+        resume_content = Path(payload.resumePath).read_text().strip()
+    except Exception:
+        raise HTTPException(400, f"Cannot read resume file: {payload.resumePath}")
+    result = score_job(resume_content, payload.analysis)
 
     return {
         "score": result.score,
@@ -121,7 +125,7 @@ def api_write_resume(payload: WriteResumePayload):
         raise HTTPException(400, f"Cannot read resume file: {payload.resumePath}")
 
     ext = Path(payload.resumePath).suffix.lower()
-    print(f"[write] Resume: {len(resume_content)} chars, Analysis: {len(payload.analysis)} chars")
+    print(f"[write] Resume path: {payload.resumePath}, Analysis: {len(payload.analysis)} chars")
 
     # Detect format from source content, not just extension
     if "\\documentclass" in resume_content or "\\begin{document}" in resume_content:

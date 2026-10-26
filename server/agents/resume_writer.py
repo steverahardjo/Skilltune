@@ -20,34 +20,41 @@ _COMMON_RULES = """RULES:
 - Reorder skills/experience to highlight what the job wants most
 - Never fabricate experience or skills not present in the reference resume"""
 
-SYSTEM_PROMPT_TYPST = f"""You are a resume writer specialized in Typst (.typ) format. Write resumes using Typst markup, matching the reference resume's style.
+def _build_system_prompt(fmt: str, resume_content: str) -> str:
+    typst_prompt = f"""You are a resume writer specialized in Typst (.typ) format. Write resumes using Typst markup, matching the reference resume's style.
 
-You have:
-1. RESUME SOURCE — reference for style, formatting, layout, Typst functions used, and the user's actual background (experience, skills, education).
-2. JOB POSTING ANALYSIS — structured breakdown of job requirements.
+You have access to the `writer` tool to save the generated resume source code to a file.
+
+Here is the reference resume — study its style, formatting, layout, Typst functions used, and the person's actual background (experience, skills, education):
+
+--- REFERENCE RESUME ---
+{resume_content}
+--- END REFERENCE RESUME ---
 
 {_COMMON_RULES}
 
 TYPST NOTES:
 - Use Typst-native functions: #set text(), #set par(), #v(), #h(), #grid(), #align()
 - Use only standard fonts available on most systems: "DejaVu Sans", "DejaVu Serif", "DejaVu Sans Mono", "C059" (do NOT use "IBM Plex Sans", "Libertinus", or other niche fonts)
-- Write email addresses wrapped in `#text("...")` to prevent Typst from interpreting `@` as a label: `#text("john@example.com")`
+- Write email addresses wrapped in `#text("...")` to prevent Typst from interpreting `@` as a label: `#text("john@example.com")`"""
 
-You MUST use the `writer` tool to save the file. First identify the position title and company name from the job analysis, then use them in the filename."""
+    latex_prompt = f"""You are a resume writer specialized in LaTeX (.tex) format. Write resumes using LaTeX, matching the reference resume's style.
 
-SYSTEM_PROMPT_LATEX = f"""You are a resume writer specialized in LaTeX (.tex) format. Write resumes using LaTeX, matching the reference resume's style.
+You have access to the `writer` tool to save the generated resume source code to a file.
 
-You have:
-1. RESUME SOURCE — reference for style, formatting, layout, document class, packages, and the user's actual background (experience, skills, education).
-2. JOB POSTING ANALYSIS — structured breakdown of job requirements.
+Here is the reference resume — study its style, formatting, layout, document class, packages, and the person's actual background (experience, skills, education):
+
+--- REFERENCE RESUME ---
+{resume_content}
+--- END REFERENCE RESUME ---
 
 {_COMMON_RULES}
 
 LATEX NOTES:
 - Use standard packages: geometry, enumitem, titlesec, hyperref, fontenc, inputenc
-- Avoid fragile commands that may break compilation
+- Avoid fragile commands that may break compilation"""
 
-You MUST use the `writer` tool to save the file. First identify the position title and company name from the job analysis, then use them in the filename."""
+    return typst_prompt if fmt == "typst" else latex_prompt
 
 
 def _sanitize(s: str) -> str:
@@ -79,7 +86,7 @@ def write_resume(
     fmt: str = "typst",
     model_name: str = "deepseek-chat",
 ) -> str:
-    system_prompt = SYSTEM_PROMPT_TYPST if fmt == "typst" else SYSTEM_PROMPT_LATEX
+    system_prompt = _build_system_prompt(fmt, resume_content)
     ext = ".typ" if fmt == "typst" else ".tex"
     fmt_name = "Typst" if fmt == "typst" else "LaTeX"
     today = date.today().isoformat()
@@ -89,27 +96,26 @@ def write_resume(
 
     response = model_with_tools.invoke([
         SystemMessage(content=system_prompt),
-        HumanMessage(content=f"""Write a tailored {fmt_name} resume using the reference resume and job analysis below.
-
-RESUME SOURCE (use this for style, formatting, and the user's actual background):
---- resume{ext} ---
-{resume_content[:6000]}
---- end resume ---
+        HumanMessage(content=f"""Write a tailored {fmt_name} resume for the job described in the analysis below.
 
 JOB POSTING ANALYSIS:
 {analysis}
 
-First, identify the position title and company from the analysis. Then call the `writer` tool with:
-- filename: "<position>_<company>_{today}{ext}" (sanitized: lowercase, underscores, no special chars)
-- content: the complete resume source code"""),
+Steps:
+1. Identify the position title and company from the analysis
+2. Use the `writer` tool with:
+   - filename: "<position>_<company>_{today}{ext}" (sanitized: lowercase, underscores, no special chars)
+   - content: the complete tailored resume source code"""),
     ])
 
     if response.tool_calls:
+        filename = None
         for tc in response.tool_calls:
             if tc["name"] == "writer":
                 writer.invoke(tc["args"])
                 filename = tc["args"]["filename"]
-                return str(OUT_DIR / filename)
+        if filename:
+            return str(OUT_DIR / filename)
 
     fallback = _fallback_name(analysis, today, ext)
     OUT_DIR.mkdir(parents=True, exist_ok=True)

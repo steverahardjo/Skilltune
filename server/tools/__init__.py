@@ -8,6 +8,21 @@ CSV_PATH = OUT_DIR / "applications.csv"
 
 
 @tool
+def read_file(path: str) -> str:
+    """Read a file from the local filesystem and return its content.
+    Use this to load the reference resume or analysis text file.
+
+    Args:
+        path: Absolute or relative path to the file
+    """
+    filepath = Path(path)
+    if not filepath.exists():
+        return f"Error: file not found: {path}"
+    content = filepath.read_text().strip()
+    return content
+
+
+@tool
 def writer(filename: str, content: str) -> str:
     """Write the resume source code to a local file (.typ or .tex).
     Use this to persist the tailored resume before compiling it.

@@ -116,7 +116,7 @@ export function Onboarding({ resumeSession, onComplete }: Props) {
           <p className="form-sub">Absolute path to your resume</p>
           <div className="form-group">
             <label className="form-label">File path</label>
-            <input className="form-input" value={config.resumeFile} onChange={(e) => update("resumeFile", e.target.value)} placeholder="/home/you/resume.typ" autoFocus />
+            <input className="form-input" value={config.resumeFile} onChange={(e) => update("resumeFile", e.target.value)} placeholder="/home/holyknight101/Documents/resume/resume.typst" autoFocus />
           </div>
           <div className="hint-card workspace-hint">
             <svg className="hint-icon" viewBox="0 0 24 24" fill="currentColor">
